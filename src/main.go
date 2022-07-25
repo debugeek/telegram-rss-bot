@@ -19,9 +19,10 @@ var args struct {
 }
 
 func launch() {
+	InitFirebase()
 	InitSession()
 	InitMonitor()
-	InitContexts()
+	InitContext()
 }
 
 func main() {

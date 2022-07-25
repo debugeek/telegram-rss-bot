@@ -1,8 +1,9 @@
 package main
 
 type Account struct {
-	Id   int64 `firestore:"id"`
-	Kind int   `firestore:"kind"`
+	Id     int64 `firestore:"id"`
+	Kind   int   `firestore:"kind"`
+	Status int   `firestore:"status"`
 }
 
 type Subscription struct {

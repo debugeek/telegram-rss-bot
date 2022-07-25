@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"log"
 	"sort"
+	"strconv"
 	"time"
 
 	_ "github.com/mattn/go-sqlite3"
@@ -16,77 +17,54 @@ type Context struct {
 	caches        map[string]map[string]interface{}
 }
 
-func InitContexts() error {
-	accounts, err := SharedFirebase().GetAccounts()
+func InitContext() {
+	accounts, err := fb.GetAccounts()
 	if err != nil {
-		return err
+		log.Println(err)
+		return
 	}
 
 	for _, account := range accounts {
-		_, err := NewContext(account.Id, account.Kind)
-		if err != nil {
-			return err
+		context := &Context{
+			id:            account.Id,
+			account:       account,
+			subscriptions: make(map[string]*Subscription),
+			caches:        make(map[string]map[string]interface{}),
 		}
-	}
 
-	return nil
-}
+		if subscriptions, err := fb.GetSubscriptions(account); err != nil {
+			log.Println(err)
+			continue
+		} else {
+			for id, subscription := range subscriptions {
+				context.subscriptions[id] = subscription
 
-func NewContext(id int64, kind int) (*Context, error) {
-	context := contexts[id]
-	if context != nil {
-		return context, nil
-	}
-
-	context = &Context{
-		id:            id,
-		subscriptions: make(map[string]*Subscription),
-		caches:        make(map[string]map[string]interface{}),
-	}
-
-	account, err := SharedFirebase().GetAccount(id)
-	if err != nil {
-		return nil, err
-	}
-	if account == nil {
-		account = &Account{
-			Id:   id,
-			Kind: kind,
-		}
-		err = SharedFirebase().SaveAccount(account)
-		if err != nil {
-			return nil, err
-		}
-	}
-	context.account = account
-
-	if subscriptions, err := SharedFirebase().GetSubscriptions(account); err != nil {
-		return nil, err
-	} else {
-		for id, subscription := range subscriptions {
-			context.subscriptions[id] = subscription
-
-			cache, err := SharedFirebase().GetFeedCache(account, subscription)
-			if err != nil {
-				return nil, err
+				cache, err := fb.GetFeedCache(account, subscription)
+				if err != nil {
+					log.Println(err)
+					continue
+				}
+				context.caches[id] = cache
 			}
-			context.caches[id] = cache
+		}
+
+		contexts[account.Id] = context
+
+		for _, subscription := range context.subscriptions {
+			context.startObserving(subscription)
 		}
 	}
-
-	for _, subscription := range context.subscriptions {
-		err = context.StartObserving(subscription)
-		if err != nil {
-			return nil, err
-		}
-	}
-
-	contexts[account.Id] = context
-
-	return context, nil
 }
 
-func (context *Context) StartObserving(subscription *Subscription) error {
+func GetCachedContext(id int64, kind int) *Context {
+	return contexts[id]
+}
+
+func CacheContext(context *Context) {
+	contexts[context.id] = context
+}
+
+func (context *Context) startObserving(subscription *Subscription) error {
 	observer := &Observer{
 		identifier: context.id,
 		handler: func(items map[string]*Item) {
@@ -111,7 +89,7 @@ func (context *Context) StartObserving(subscription *Subscription) error {
 					}
 
 					msg := fmt.Sprintf("[%s](%s)", item.title, item.link)
-					err := session.Send(context.id, msg)
+					err := session.Send(context, msg)
 					if err != nil {
 						log.Println(err)
 						return
@@ -129,21 +107,20 @@ func (context *Context) StartObserving(subscription *Subscription) error {
 			for id, cache := range new {
 				context.caches[subscription.Id][id] = cache
 			}
-			SharedFirebase().SetFeedCache(context.account, subscription, context.caches[subscription.Id])
+			fb.SetFeedCache(context.account, subscription, context.caches[subscription.Id])
 		},
 	}
-	SharedMonitor().AddObserver(observer, subscription.Link)
+	monitor.AddObserver(observer, subscription.Link)
 
 	return nil
 }
 
-func (context *Context) StopObserving(subscription *Subscription) error {
-	SharedMonitor().RemoveObserver(context.id, subscription.Link)
-
+func (context *Context) stopObserving(subscription *Subscription) error {
+	monitor.RemoveObserver(context.id, subscription.Link)
 	return nil
 }
 
-func (context *Context) Subscribe(channel *Channel) (*Subscription, error) {
+func (context *Context) subscribe(channel *Channel) (*Subscription, error) {
 	id := channel.id
 
 	subscription := context.subscriptions[id]
@@ -169,7 +146,7 @@ func (context *Context) Subscribe(channel *Channel) (*Subscription, error) {
 	return subscription, nil
 }
 
-func (context *Context) Unsubscribe(subscription *Subscription) error {
+func (context *Context) unsubscribe(subscription *Subscription) error {
 	err := fb.DeleteSubscription(context.account, subscription)
 	if err != nil {
 		return err
@@ -185,7 +162,7 @@ func (context *Context) Unsubscribe(subscription *Subscription) error {
 	return err
 }
 
-func (context *Context) SetItemsPushed(subscription *Subscription, items []*Item) error {
+func (context *Context) setItemsHavePushed(subscription *Subscription, items []*Item) error {
 	for _, item := range items {
 		context.caches[subscription.Id][item.id] = map[string]interface{}{
 			"pushed":    true,
@@ -193,10 +170,10 @@ func (context *Context) SetItemsPushed(subscription *Subscription, items []*Item
 		}
 	}
 
-	return SharedFirebase().SetFeedCache(context.account, subscription, context.caches[subscription.Id])
+	return fb.SetFeedCache(context.account, subscription, context.caches[subscription.Id])
 }
 
-func (context *Context) GetSubscriptions() []*Subscription {
+func (context *Context) getSubscriptions() []*Subscription {
 	subscriptions := make([]*Subscription, 0)
 	for _, subscription := range context.subscriptions {
 		subscriptions = append(subscriptions, subscription)
@@ -207,4 +184,81 @@ func (context *Context) GetSubscriptions() []*Subscription {
 	})
 
 	return subscriptions
+}
+
+// Command Handler
+
+func (context *Context) HandleListCommand() string {
+	subscriptions := context.getSubscriptions()
+	if len(subscriptions) == 0 {
+		return `Your list is empty.`
+	}
+
+	var message string
+	for idx, subscription := range subscriptions {
+		message += fmt.Sprintf("%d. [%s](%s) \n", idx+1, subscription.Title, subscription.Link)
+	}
+	return message
+}
+
+func (context *Context) HandleSubscribeCommand(args string) string {
+	if len(args) == 0 || !isValidURL(args) {
+		return `Unable to parse the url.`
+	}
+
+	if channel, items, err := FetchChannel(args); err != nil {
+		return `Fetch error.`
+	} else if subscription, err := context.subscribe(channel); err != nil {
+		return `Subscribe failed.`
+	} else if err := context.setItemsHavePushed(subscription, items); err != nil {
+		return `Subscribe failed.`
+	} else if err := context.startObserving(subscription); err != nil {
+		return `Subscribe failed.`
+	} else {
+		if len(items) == 0 {
+			return fmt.Sprintf(`[%s](%s) subscribed.`, subscription.Title, subscription.Link)
+		} else {
+			return fmt.Sprintf(`[%s](%s) subscribed. Here is the latest feed from the channel.
+			
+[%s](%s)`, subscription.Title, subscription.Link, items[0].title, items[0].link)
+		}
+	}
+}
+
+func (context *Context) HandleUnsubscribeCommand(args string) string {
+	subscriptions := context.getSubscriptions()
+
+	index, err := strconv.Atoi(args)
+	if err != nil || index <= 0 || index > len(subscriptions) {
+		return fmt.Sprintf(`Invalid index.
+			
+%s`, context.HandleListCommand())
+	}
+
+	index -= 1
+
+	subscription := subscriptions[index]
+
+	if err := context.unsubscribe(subscription); err != nil {
+		return `Unsubscribe failed.`
+	} else if err := context.stopObserving(subscription); err != nil {
+		return `Unsubscribe failed.`
+	} else {
+		return fmt.Sprintf(`[%s](%s) unsubscribed.`, subscription.Title, subscription.Link)
+	}
+}
+
+func (context *Context) HandleHotCommand(args string) string {
+	if statistics, err := fb.GetTopSubscriptions(5); err != nil {
+		return `Oops, something wrong happened.`
+	} else if len(statistics) == 0 {
+		return "Not enough data."
+	} else {
+		var message string
+		for idx, statistic := range statistics {
+			message += fmt.Sprintf("%d. [%s](%s) (👥 %d)\n", idx+1, statistic.Subscription.Title, statistic.Subscription.Link, statistic.Count)
+		}
+		return message
+	}
+
 }

@@ -18,17 +18,37 @@ type Observer struct {
 }
 
 func InitMonitor() {
-	SharedMonitor().Run()
-	log.Println(`Monitor initialized`)
-}
-
-func SharedMonitor() *Monitor {
 	monitorOnce.Do(func() {
 		monitor = &Monitor{
 			observers: make(map[string]map[int64]*Observer),
 		}
 	})
-	return monitor
+	monitor.Run()
+	log.Println(`Monitor initialized`)
+}
+
+func (monitor *Monitor) Run() {
+	go monitor.RunLoop()
+}
+
+func (monitor *Monitor) Stop() {
+	monitor.quit <- true
+}
+
+func (monitor *Monitor) RunLoop() {
+	monitor.refresh()
+
+	monitor.ticker = time.NewTicker(time.Duration(rand.Intn(60)) * time.Second)
+	monitor.quit = make(chan bool)
+
+	for {
+		select {
+		case <-monitor.quit:
+			return
+		case <-monitor.ticker.C:
+			monitor.refresh()
+		}
+	}
 }
 
 func (monitor *Monitor) AddObserver(observer *Observer, link string) {
@@ -37,11 +57,9 @@ func (monitor *Monitor) AddObserver(observer *Observer, link string) {
 		observers = make(map[int64]*Observer)
 		monitor.observers[link] = observers
 	}
-
 	observers[observer.identifier] = observer
-	monitor.observers[link] = observers
 
-	monitor.Pull()
+	monitor.refresh()
 }
 
 func (monitor *Monitor) RemoveObserver(identifier int64, link string) {
@@ -54,31 +72,7 @@ func (monitor *Monitor) RemoveObserver(identifier int64, link string) {
 	monitor.observers[link] = observers
 }
 
-func (monitor *Monitor) Run() {
-	go monitor.Launch()
-}
-
-func (monitor *Monitor) Stop() {
-	monitor.quit <- true
-}
-
-func (monitor *Monitor) Launch() {
-	monitor.Pull()
-
-	monitor.ticker = time.NewTicker(time.Duration(rand.Intn(60)+300) * time.Second)
-	monitor.quit = make(chan bool)
-
-	for {
-		select {
-		case <-monitor.quit:
-			return
-		case <-monitor.ticker.C:
-			monitor.Pull()
-		}
-	}
-}
-
-func (monitor *Monitor) Pull() {
+func (monitor *Monitor) refresh() {
 	for link, observers := range monitor.observers {
 		if len(observers) == 0 {
 			continue
