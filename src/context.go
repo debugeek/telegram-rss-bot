@@ -72,42 +72,60 @@ func (context *Context) startObserving(subscription *Subscription) error {
 				return
 			}
 
-			old := make(map[string]interface{})
-			new := make(map[string]interface{})
+			var cacheUpdated = false
 
-			for id, cache := range context.caches[subscription.Id] {
-				if items[id] == nil {
-					old[id] = cache
+			for id, _ := range context.caches[subscription.Id] {
+				if items[id] != nil {
+					continue
 				}
+				delete(context.caches[subscription.Id], id)
+				cacheUpdated = true
 			}
+
+			posts := ""
+			count := 0
 
 			for _, item := range items {
-				if context.caches[subscription.Id][item.id] == nil {
-					new[item.id] = map[string]interface{}{
-						"pushed":    true,
-						"timestamp": time.Now().Unix(),
-					}
+				cache := context.caches[subscription.Id][item.id]
+				if cache != nil {
+					continue
+				}
 
-					msg := fmt.Sprintf("[%s](%s)", item.title, item.link)
-					err := session.Send(context, msg)
+				cacheUpdated = true
+
+				context.caches[subscription.Id][item.id] = map[string]interface{}{
+					"pushed":    true,
+					"timestamp": time.Now().Unix(),
+				}
+
+				post := fmt.Sprintf("[%s](%s)\n", item.title, item.link)
+
+				if len(posts)+len(post) > 4096 {
+					disableWebPagePreview := count > 1
+					err := session.Send(context, posts, disableWebPagePreview)
 					if err != nil {
 						log.Println(err)
-						return
 					}
+
+					posts = ""
+					count = 0
+				}
+
+				posts += post
+				count += 1
+			}
+
+			if len(posts) > 0 {
+				disableWebPagePreview := count > 1
+				err := session.Send(context, posts, disableWebPagePreview)
+				if err != nil {
+					log.Println(err)
 				}
 			}
 
-			if len(new) == 0 && len(old) == 0 {
-				return
+			if cacheUpdated {
+				fb.SetFeedCache(context.account, subscription, context.caches[subscription.Id])
 			}
-
-			for id := range old {
-				delete(context.caches[subscription.Id], id)
-			}
-			for id, cache := range new {
-				context.caches[subscription.Id][id] = cache
-			}
-			fb.SetFeedCache(context.account, subscription, context.caches[subscription.Id])
 		},
 	}
 	monitor.AddObserver(observer, subscription.Link)
@@ -169,7 +187,6 @@ func (context *Context) setItemsHavePushed(subscription *Subscription, items []*
 			"timestamp": time.Now().Unix(),
 		}
 	}
-
 	return fb.SetFeedCache(context.account, subscription, context.caches[subscription.Id])
 }
 
@@ -219,7 +236,7 @@ func (context *Context) HandleSubscribeCommand(args string) string {
 			return fmt.Sprintf(`[%s](%s) subscribed.`, subscription.Title, subscription.Link)
 		} else {
 			return fmt.Sprintf(`[%s](%s) subscribed. Here is the latest feed from the channel.
-			
+            
 [%s](%s)`, subscription.Title, subscription.Link, items[0].title, items[0].link)
 		}
 	}
@@ -231,7 +248,7 @@ func (context *Context) HandleUnsubscribeCommand(args string) string {
 	index, err := strconv.Atoi(args)
 	if err != nil || index <= 0 || index > len(subscriptions) {
 		return fmt.Sprintf(`Invalid index.
-			
+            
 %s`, context.HandleListCommand())
 	}
 

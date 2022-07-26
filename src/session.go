@@ -10,9 +10,8 @@ import (
 )
 
 type Session struct {
-	bot     *tgbotapi.BotAPI
-	token   string
-	handler func(context *Context, update tgbotapi.Update)
+	bot   *tgbotapi.BotAPI
+	token string
 }
 
 func InitSession() {
@@ -67,6 +66,8 @@ func (session *Session) RunLoop() {
 			continue
 		}
 
+		log.Println(message.Text)
+
 		id := message.Chat.ID
 		kind := -1
 		if message.Chat.IsPrivate() {
@@ -102,29 +103,42 @@ func (session *Session) RunLoop() {
 	}
 }
 
-func (session *Session) Send(context *Context, message string) error {
+func (session *Session) Send(context *Context, text string, disableWebPagePreview bool) error {
 	if context.account.Status == -1 {
 		return nil
 	}
 
-	msg := tgbotapi.NewMessage(context.id, message)
-	msg.ParseMode = "markdown"
-	_, err := session.bot.Send(msg)
+	message := tgbotapi.MessageConfig{
+		BaseChat: tgbotapi.BaseChat{
+			ChatID:           context.id,
+			ReplyToMessageID: 0,
+		},
+		Text:                  text,
+		ParseMode:             "markdown",
+		DisableWebPagePreview: disableWebPagePreview,
+	}
+	_, err := session.bot.Send(message)
 	if err != nil {
 		session.handleError(context, err)
 	}
 	return err
 }
 
-func (session *Session) Reply(context *Context, replyToMessageID int, message string) error {
+func (session *Session) Reply(context *Context, replyToMessageID int, text string, disableWebPagePreview bool) error {
 	if context.account.Status == -1 {
 		return nil
 	}
 
-	msg := tgbotapi.NewMessage(context.id, message)
-	msg.ParseMode = "markdown"
-	msg.ReplyToMessageID = replyToMessageID
-	_, err := session.bot.Send(msg)
+	message := tgbotapi.MessageConfig{
+		BaseChat: tgbotapi.BaseChat{
+			ChatID:           context.id,
+			ReplyToMessageID: replyToMessageID,
+		},
+		Text:                  text,
+		ParseMode:             "markdown",
+		DisableWebPagePreview: disableWebPagePreview,
+	}
+	_, err := session.bot.Send(message)
 	if err != nil {
 		session.handleError(context, err)
 	}
@@ -141,14 +155,14 @@ func (session *Session) handleMessage(context *Context, message *tgbotapi.Messag
 		switch strings.ToLower(message.Command()) {
 		case "start":
 			{
-				session.Send(context, "Greetings.")
+				session.Send(context, "Greetings.", false)
 				break
 			}
 
 		case "list":
 			{
 				response := context.HandleListCommand()
-				session.Reply(context, message.MessageID, response)
+				session.Reply(context, message.MessageID, response, false)
 				break
 			}
 
@@ -156,7 +170,7 @@ func (session *Session) handleMessage(context *Context, message *tgbotapi.Messag
 			{
 				args := message.CommandArguments()
 				response := context.HandleSubscribeCommand(args)
-				session.Reply(context, message.MessageID, response)
+				session.Reply(context, message.MessageID, response, false)
 				break
 			}
 
@@ -164,7 +178,7 @@ func (session *Session) handleMessage(context *Context, message *tgbotapi.Messag
 			{
 				args := message.CommandArguments()
 				response := context.HandleUnsubscribeCommand(args)
-				session.Reply(context, message.MessageID, response)
+				session.Reply(context, message.MessageID, response, false)
 				break
 			}
 
@@ -172,7 +186,7 @@ func (session *Session) handleMessage(context *Context, message *tgbotapi.Messag
 			{
 				args := message.CommandArguments()
 				response := context.HandleHotCommand(args)
-				session.Reply(context, message.MessageID, response)
+				session.Reply(context, message.MessageID, response, false)
 				break
 			}
 		default:
