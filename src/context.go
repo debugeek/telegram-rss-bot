@@ -68,64 +68,7 @@ func (context *Context) startObserving(subscription *Subscription) error {
 	observer := &Observer{
 		identifier: context.id,
 		handler: func(items map[string]*Item) {
-			if len(items) == 0 {
-				return
-			}
-
-			var cacheUpdated = false
-
-			for id, _ := range context.caches[subscription.Id] {
-				if items[id] != nil {
-					continue
-				}
-				delete(context.caches[subscription.Id], id)
-				cacheUpdated = true
-			}
-
-			posts := ""
-			count := 0
-
-			for _, item := range items {
-				cache := context.caches[subscription.Id][item.id]
-				if cache != nil {
-					continue
-				}
-
-				cacheUpdated = true
-
-				context.caches[subscription.Id][item.id] = map[string]interface{}{
-					"pushed":    true,
-					"timestamp": time.Now().Unix(),
-				}
-
-				post := fmt.Sprintf("[%s](%s)\n", item.title, item.link)
-
-				if len(posts)+len(post) > 4096 {
-					disableWebPagePreview := count > 1
-					err := session.Send(context, posts, disableWebPagePreview)
-					if err != nil {
-						log.Println(err)
-					}
-
-					posts = ""
-					count = 0
-				}
-
-				posts += post
-				count += 1
-			}
-
-			if len(posts) > 0 {
-				disableWebPagePreview := count > 1
-				err := session.Send(context, posts, disableWebPagePreview)
-				if err != nil {
-					log.Println(err)
-				}
-			}
-
-			if cacheUpdated {
-				fb.SetFeedCache(context.account, subscription, context.caches[subscription.Id])
-			}
+			context.handleFeedItems(items, subscription)
 		},
 	}
 	monitor.AddObserver(observer, subscription.Link)
@@ -278,4 +221,68 @@ func (context *Context) HandleHotCommand(args string) string {
 		return message
 	}
 
+}
+
+func (context *Context) handleFeedItems(items map[string]*Item, subscription *Subscription) {
+	if len(items) == 0 || subscription == nil {
+		return
+	}
+
+	var cacheUpdated = false
+
+	for id, _ := range context.caches[subscription.Id] {
+		if items[id] != nil {
+			continue
+		}
+		delete(context.caches[subscription.Id], id)
+		cacheUpdated = true
+	}
+
+	var newItems []*Item
+
+	for _, item := range items {
+		cache := context.caches[subscription.Id][item.id]
+		if cache != nil {
+			continue
+		}
+
+		context.caches[subscription.Id][item.id] = map[string]interface{}{
+			"pushed":    true,
+			"timestamp": time.Now().Unix(),
+		}
+
+		newItems = append(newItems, item)
+		cacheUpdated = true
+	}
+
+	if len(newItems) == 1 {
+		session.Send(context, fmt.Sprintf("[%s](%s)", newItems[0].title, newItems[0].link), false)
+	} else if len(newItems) > 1 {
+		posts := ""
+		count := 0
+
+		for _, item := range newItems {
+			post := fmt.Sprintf("[%s](%s)\n", item.title, item.link)
+
+			if len(posts)+len(post) > 4096 {
+				disableWebPagePreview := count > 0
+				session.Send(context, posts, disableWebPagePreview)
+
+				posts = ""
+				count = 0
+			}
+
+			posts += post
+			count += 1
+		}
+
+		if len(posts) > 0 {
+			disableWebPagePreview := count > 1
+			session.Send(context, posts, disableWebPagePreview)
+		}
+	}
+
+	if cacheUpdated {
+		fb.SetFeedCache(context.account, subscription, context.caches[subscription.Id])
+	}
 }

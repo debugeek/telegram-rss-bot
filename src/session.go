@@ -1,7 +1,6 @@
 package main
 
 import (
-	"fmt"
 	"log"
 	"strings"
 	"time"
@@ -196,7 +195,8 @@ func (session *Session) handleMessage(context *Context, message *tgbotapi.Messag
 }
 
 func (session *Session) handleError(context *Context, err error) {
-	if strings.Contains(fmt.Sprint(err), "chat not found") {
+	switch err.Error() {
+	case errChatNotFound, errNotMember:
 		context.account.Status = -1
 		fb.SaveAccount(context.account)
 	}
