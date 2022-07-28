@@ -86,7 +86,7 @@ func (context *Context) subscribe(channel *Channel) (*Subscription, error) {
 
 	subscription := context.subscriptions[id]
 	if subscription != nil {
-		return nil, fmt.Errorf(`Subscription [%s](%s) exists`, subscription.Title, subscription.Link)
+		return nil, fmt.Errorf(`Subscription %s exists`, markdownLink(subscription.Title, subscription.Link))
 	}
 
 	subscription = &Subscription{
@@ -156,7 +156,7 @@ func (context *Context) HandleListCommand() string {
 
 	var message string
 	for idx, subscription := range subscriptions {
-		message += fmt.Sprintf("%d. [%s](%s) \n", idx+1, subscription.Title, subscription.Link)
+		message += fmt.Sprintf("%d. %s \n", idx+1, markdownLink(subscription.Title, subscription.Link))
 	}
 	return message
 }
@@ -176,11 +176,11 @@ func (context *Context) HandleSubscribeCommand(args string) string {
 		return `Subscribe failed.`
 	} else {
 		if len(items) == 0 {
-			return fmt.Sprintf(`[%s](%s) subscribed.`, subscription.Title, subscription.Link)
+			return fmt.Sprintf(`%s subscribed.`, markdownLink(subscription.Title, subscription.Link))
 		} else {
-			return fmt.Sprintf(`[%s](%s) subscribed. Here is the latest feed from the channel.
+			return fmt.Sprintf(`%s subscribed. Here is the latest feed from the channel.
             
-[%s](%s)`, subscription.Title, subscription.Link, items[0].title, items[0].link)
+%s`, markdownLink(subscription.Title, subscription.Link), markdownLink(items[0].title, items[0].link))
 		}
 	}
 }
@@ -204,7 +204,7 @@ func (context *Context) HandleUnsubscribeCommand(args string) string {
 	} else if err := context.stopObserving(subscription); err != nil {
 		return `Unsubscribe failed.`
 	} else {
-		return fmt.Sprintf(`[%s](%s) unsubscribed.`, subscription.Title, subscription.Link)
+		return fmt.Sprintf(`%s unsubscribed.`, markdownLink(subscription.Title, subscription.Link))
 	}
 }
 
@@ -216,7 +216,7 @@ func (context *Context) HandleHotCommand(args string) string {
 	} else {
 		var message string
 		for idx, statistic := range statistics {
-			message += fmt.Sprintf("%d. [%s](%s) (👥 %d)\n", idx+1, statistic.Subscription.Title, statistic.Subscription.Link, statistic.Count)
+			message += fmt.Sprintf("%d. %s (👥 %d)\n", idx+1, markdownLink(statistic.Subscription.Title, statistic.Subscription.Link), statistic.Count)
 		}
 		return message
 	}
@@ -256,13 +256,13 @@ func (context *Context) handleFeedItems(items map[string]*Item, subscription *Su
 	}
 
 	if len(newItems) == 1 {
-		session.Send(context, fmt.Sprintf("[%s](%s)", newItems[0].title, newItems[0].link), false)
+		session.Send(context, markdownLink(newItems[0].title, newItems[0].link), false)
 	} else if len(newItems) > 1 {
 		posts := ""
 		count := 0
 
 		for _, item := range newItems {
-			post := fmt.Sprintf("[%s](%s)\n", item.title, item.link)
+			post := fmt.Sprintf("%s\n", markdownLink(item.title, item.link))
 
 			if len(posts)+len(post) > 4096 {
 				disableWebPagePreview := count > 0
