@@ -2,20 +2,16 @@ package main
 
 import (
 	"sync"
-
-	"google.golang.org/api/option"
 )
 
 var (
 	token string
 
-	opt option.ClientOption
-
 	sessionOnce sync.Once
 	session     *Session
 
-	firebaseOnce sync.Once
-	fb           Firebase
+	dbOnce sync.Once
+	db     DatabaseProtocol
 
 	monitorOnce sync.Once
 	monitor     *Monitor

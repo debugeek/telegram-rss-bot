@@ -18,7 +18,7 @@ type Context struct {
 }
 
 func InitContext() {
-	accounts, err := fb.GetAccounts()
+	accounts, err := db.GetAccounts()
 	if err != nil {
 		log.Println(err)
 		return
@@ -32,14 +32,14 @@ func InitContext() {
 			caches:        make(map[string]map[string]interface{}),
 		}
 
-		if subscriptions, err := fb.GetSubscriptions(account); err != nil {
+		if subscriptions, err := db.GetSubscriptions(account); err != nil {
 			log.Println(err)
 			continue
 		} else {
 			for id, subscription := range subscriptions {
 				context.subscriptions[id] = subscription
 
-				cache, err := fb.GetFeedCache(account, subscription)
+				cache, err := db.GetFeedCache(account, subscription)
 				if err != nil {
 					log.Println(err)
 					continue
@@ -99,7 +99,7 @@ func (context *Context) subscribe(channel *Channel) (*Subscription, error) {
 
 	context.caches[id] = make(map[string]interface{})
 
-	err := fb.AddSubscription(context.account, subscription)
+	err := db.AddSubscription(context.account, subscription)
 	if err != nil {
 		return nil, err
 	}
@@ -108,13 +108,13 @@ func (context *Context) subscribe(channel *Channel) (*Subscription, error) {
 }
 
 func (context *Context) unsubscribe(subscription *Subscription) error {
-	err := fb.DeleteSubscription(context.account, subscription)
+	err := db.DeleteSubscription(context.account, subscription)
 	if err != nil {
 		return err
 	}
 	delete(context.subscriptions, subscription.Id)
 
-	err = fb.DeleteFeedCache(context.account, subscription)
+	err = db.DeleteFeedCache(context.account, subscription)
 	if err != nil {
 		return err
 	}
@@ -130,7 +130,7 @@ func (context *Context) setItemsHavePushed(subscription *Subscription, items []*
 			"timestamp": time.Now().Unix(),
 		}
 	}
-	return fb.SetFeedCache(context.account, subscription, context.caches[subscription.Id])
+	return db.SetFeedCache(context.account, subscription, context.caches[subscription.Id])
 }
 
 func (context *Context) getSubscriptions() []*Subscription {
@@ -209,7 +209,7 @@ func (context *Context) HandleUnsubscribeCommand(args string) string {
 }
 
 func (context *Context) HandleHotCommand(args string) string {
-	if statistics, err := fb.GetTopSubscriptions(5); err != nil {
+	if statistics, err := db.GetTopSubscriptions(5); err != nil {
 		return `Oops, something wrong happened.`
 	} else if len(statistics) == 0 {
 		return "Not enough data."
@@ -283,6 +283,6 @@ func (context *Context) handleFeedItems(items map[string]*Item, subscription *Su
 	}
 
 	if cacheUpdated {
-		fb.SetFeedCache(context.account, subscription, context.caches[subscription.Id])
+		db.SetFeedCache(context.account, subscription, context.caches[subscription.Id])
 	}
 }

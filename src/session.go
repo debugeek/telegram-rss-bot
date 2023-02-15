@@ -84,7 +84,7 @@ func (session *Session) RunLoop() {
 				Kind:   kind,
 				Status: 1,
 			}
-			err = fb.SaveAccount(account)
+			err = db.SaveAccount(account)
 			if err != nil {
 				log.Println(err)
 				continue
@@ -147,7 +147,7 @@ func (session *Session) Reply(context *Context, replyToMessageID int, text strin
 func (session *Session) handleMessage(context *Context, message *tgbotapi.Message) {
 	if context.account.Status == -1 {
 		context.account.Status = 1
-		fb.SaveAccount(context.account)
+		db.SaveAccount(context.account)
 	}
 
 	if message.IsCommand() {
@@ -198,6 +198,6 @@ func (session *Session) handleError(context *Context, err error) {
 	switch err.Error() {
 	case errChatNotFound, errNotMember:
 		context.account.Status = -1
-		fb.SaveAccount(context.account)
+		db.SaveAccount(context.account)
 	}
 }

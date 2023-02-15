@@ -2,12 +2,15 @@ package main
 
 import (
 	"context"
+	"encoding/base64"
 	"log"
+	"os"
 	"strconv"
 
 	"cloud.google.com/go/firestore"
 	firebase "firebase.google.com/go"
 	"google.golang.org/api/iterator"
+	"google.golang.org/api/option"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 )
@@ -18,29 +21,37 @@ type Firebase struct {
 	ctx       context.Context
 }
 
-func InitFirebase() {
-	firebaseOnce.Do(func() {
-		fb = Firebase{}
-		fb.ctx = context.Background()
+func (fb *Firebase) InitDatabase() {
+	var conf []byte
+	if len(args.FirebaseConf) != 0 {
+		conf, _ = base64.StdEncoding.DecodeString(args.FirebaseConf)
+	} else if len(args.FirebaseConfEnvKey) != 0 {
+		conf, _ = base64.StdEncoding.DecodeString(os.Getenv(args.FirebaseConfEnvKey))
+	} else {
+		panic("firebase credential not found")
+	}
+	opt := option.WithCredentialsJSON(conf)
 
-		if app, err := firebase.NewApp(fb.ctx, nil, opt); err != nil {
-			panic(err)
-		} else {
-			fb.app = app
-		}
+	fb.ctx = context.Background()
 
-		if firestore, err := fb.app.Firestore(fb.ctx); err != nil {
-			panic(err)
-		} else {
-			fb.firestore = firestore
-		}
-	})
+	if app, err := firebase.NewApp(fb.ctx, nil, opt); err != nil {
+		panic(err)
+	} else {
+		fb.app = app
+	}
+
+	if firestore, err := fb.app.Firestore(fb.ctx); err != nil {
+		panic(err)
+	} else {
+		fb.firestore = firestore
+	}
+
 	log.Println(`Firebase initialized`)
 }
 
 // Account
 
-func (fb Firebase) GetAccounts() ([]*Account, error) {
+func (fb *Firebase) GetAccounts() ([]*Account, error) {
 	accounts := make([]*Account, 0)
 
 	iter := fb.firestore.Collection("accounts").Documents(fb.ctx)
@@ -62,7 +73,7 @@ func (fb Firebase) GetAccounts() ([]*Account, error) {
 	return accounts, nil
 }
 
-func (fb Firebase) GetAccount(id int64) (*Account, error) {
+func (fb *Firebase) GetAccount(id int64) (*Account, error) {
 	iter := fb.firestore.Collection("accounts").Where("id", "==", id).Documents(fb.ctx)
 
 	doc, err := iter.Next()
@@ -79,7 +90,7 @@ func (fb Firebase) GetAccount(id int64) (*Account, error) {
 	return account, err
 }
 
-func (fb Firebase) SaveAccount(account *Account) error {
+func (fb *Firebase) SaveAccount(account *Account) error {
 	id := strconv.FormatInt(account.Id, 10)
 
 	_, err := fb.firestore.Collection("accounts").Doc(id).Set(fb.ctx, account)
@@ -89,7 +100,7 @@ func (fb Firebase) SaveAccount(account *Account) error {
 
 // Subscription
 
-func (fb Firebase) GetSubscriptions(account *Account) (map[string]*Subscription, error) {
+func (fb *Firebase) GetSubscriptions(account *Account) (map[string]*Subscription, error) {
 	id := strconv.FormatInt(account.Id, 10)
 
 	subscriptions := make(map[string]*Subscription)
@@ -116,7 +127,7 @@ func (fb Firebase) GetSubscriptions(account *Account) (map[string]*Subscription,
 	return subscriptions, nil
 }
 
-func (fb Firebase) AddSubscription(account *Account, subscription *Subscription) error {
+func (fb *Firebase) AddSubscription(account *Account, subscription *Subscription) error {
 	id := strconv.FormatInt(account.Id, 10)
 
 	subscriptionRef := fb.firestore.Collection("assets").Doc(id).Collection("subscriptions").Doc(subscription.Id)
@@ -157,7 +168,7 @@ func (fb Firebase) AddSubscription(account *Account, subscription *Subscription)
 	return err
 }
 
-func (fb Firebase) DeleteSubscription(account *Account, subscription *Subscription) error {
+func (fb *Firebase) DeleteSubscription(account *Account, subscription *Subscription) error {
 	id := strconv.FormatInt(account.Id, 10)
 
 	subscriptionRef := fb.firestore.Collection("assets").Doc(id).Collection("subscriptions").Doc(subscription.Id)
@@ -204,7 +215,7 @@ func (fb Firebase) DeleteSubscription(account *Account, subscription *Subscripti
 	return err
 }
 
-func (fb Firebase) GetFeedCache(account *Account, subscription *Subscription) (map[string]interface{}, error) {
+func (fb *Firebase) GetFeedCache(account *Account, subscription *Subscription) (map[string]interface{}, error) {
 	id := strconv.FormatInt(account.Id, 10)
 
 	cache := make(map[string]interface{})
@@ -224,7 +235,7 @@ func (fb Firebase) GetFeedCache(account *Account, subscription *Subscription) (m
 	}
 }
 
-func (fb Firebase) SetFeedCache(account *Account, subscription *Subscription, cache map[string]interface{}) error {
+func (fb *Firebase) SetFeedCache(account *Account, subscription *Subscription, cache map[string]interface{}) error {
 	id := strconv.FormatInt(account.Id, 10)
 
 	_, err := fb.firestore.Collection("assets").Doc(id).Collection("caches").Doc(subscription.Id).Set(fb.ctx, cache)
@@ -232,7 +243,7 @@ func (fb Firebase) SetFeedCache(account *Account, subscription *Subscription, ca
 	return err
 }
 
-func (fb Firebase) DeleteFeedCache(account *Account, subscription *Subscription) error {
+func (fb *Firebase) DeleteFeedCache(account *Account, subscription *Subscription) error {
 	id := strconv.FormatInt(account.Id, 10)
 
 	_, err := fb.firestore.Collection("assets").Doc(id).Collection("caches").Doc(subscription.Id).Delete(fb.ctx)
@@ -242,7 +253,7 @@ func (fb Firebase) DeleteFeedCache(account *Account, subscription *Subscription)
 
 // Statistic
 
-func (fb Firebase) GetTopSubscriptions(num int) ([]*SubscriptionStatistic, error) {
+func (fb *Firebase) GetTopSubscriptions(num int) ([]*SubscriptionStatistic, error) {
 	statistics := make([]*SubscriptionStatistic, 0)
 
 	err := fb.firestore.RunTransaction(fb.ctx, func(ctx context.Context, tx *firestore.Transaction) error {
