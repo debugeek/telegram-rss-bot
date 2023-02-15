@@ -24,6 +24,7 @@ type Item struct {
 	id    string
 	title string
 	link  string
+	date  string
 }
 
 type SubscriptionStatistic struct {

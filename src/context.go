@@ -67,7 +67,7 @@ func CacheContext(context *Context) {
 func (context *Context) startObserving(subscription *Subscription) error {
 	observer := &Observer{
 		identifier: context.id,
-		handler: func(items map[string]*Item) {
+		handler: func(items []*Item) {
 			context.handleFeedItems(items, subscription)
 		},
 	}
@@ -166,7 +166,7 @@ func (context *Context) HandleSubscribeCommand(args string) string {
 		return `Unable to parse the url.`
 	}
 
-	if channel, items, err := FetchChannel(args); err != nil {
+	if channel, items, err := FetchItems(args); err != nil {
 		return `Fetch error.`
 	} else if subscription, err := context.subscribe(channel); err != nil {
 		return `Subscribe failed.`
@@ -178,9 +178,10 @@ func (context *Context) HandleSubscribeCommand(args string) string {
 		if len(items) == 0 {
 			return fmt.Sprintf(`%s subscribed.`, markdownLink(subscription.Title, subscription.Link))
 		} else {
+			latestItem := items[len(items)-1]
 			return fmt.Sprintf(`%s subscribed. Here is the latest feed from the channel.
             
-%s`, markdownLink(subscription.Title, subscription.Link), markdownLink(items[0].title, items[0].link))
+%s`, markdownLink(subscription.Title, subscription.Link), markdownLink(latestItem.title, latestItem.link))
 		}
 	}
 }
@@ -223,7 +224,7 @@ func (context *Context) HandleHotCommand(args string) string {
 
 }
 
-func (context *Context) handleFeedItems(items map[string]*Item, subscription *Subscription) {
+func (context *Context) handleFeedItems(items []*Item, subscription *Subscription) {
 	if len(items) == 0 || subscription == nil {
 		return
 	}
@@ -231,9 +232,18 @@ func (context *Context) handleFeedItems(items map[string]*Item, subscription *Su
 	var cacheUpdated = false
 
 	for id, _ := range context.caches[subscription.Id] {
-		if items[id] != nil {
+		cached := false
+		for _, item := range items {
+			if item.id == id {
+				cached = true
+				break
+			}
+		}
+
+		if cached {
 			continue
 		}
+
 		delete(context.caches[subscription.Id], id)
 		cacheUpdated = true
 	}

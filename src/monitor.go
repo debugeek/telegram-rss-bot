@@ -14,7 +14,7 @@ type Monitor struct {
 
 type Observer struct {
 	identifier int64
-	handler    func(items map[string]*Item)
+	handler    func(items []*Item)
 }
 
 func InitMonitor() {
@@ -78,7 +78,7 @@ func (monitor *Monitor) refresh() {
 			continue
 		}
 
-		items, err := FetchItems(link)
+		_, items, err := FetchItems(link)
 		if len(items) == 0 || err != nil {
 			continue
 		}
