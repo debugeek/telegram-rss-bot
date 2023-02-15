@@ -167,13 +167,13 @@ func (context *Context) HandleSubscribeCommand(args string) string {
 	}
 
 	if channel, items, err := FetchItems(args); err != nil {
-		return `Fetch error.`
+		return err.Error()
 	} else if subscription, err := context.subscribe(channel); err != nil {
-		return `Subscribe failed.`
+		return err.Error()
 	} else if err := context.setItemsHavePushed(subscription, items); err != nil {
-		return `Subscribe failed.`
+		return err.Error()
 	} else if err := context.startObserving(subscription); err != nil {
-		return `Subscribe failed.`
+		return err.Error()
 	} else {
 		if len(items) == 0 {
 			return fmt.Sprintf(`%s subscribed.`, markdownLink(subscription.Title, subscription.Link))
@@ -201,9 +201,9 @@ func (context *Context) HandleUnsubscribeCommand(args string) string {
 	subscription := subscriptions[index]
 
 	if err := context.unsubscribe(subscription); err != nil {
-		return `Unsubscribe failed.`
+		return err.Error()
 	} else if err := context.stopObserving(subscription); err != nil {
-		return `Unsubscribe failed.`
+		return err.Error()
 	} else {
 		return fmt.Sprintf(`%s unsubscribed.`, markdownLink(subscription.Title, subscription.Link))
 	}
@@ -211,9 +211,9 @@ func (context *Context) HandleUnsubscribeCommand(args string) string {
 
 func (context *Context) HandleHotCommand(args string) string {
 	if statistics, err := db.GetTopSubscriptions(5); err != nil {
-		return `Oops, something wrong happened.`
+		return err.Error()
 	} else if len(statistics) == 0 {
-		return "Not enough data."
+		return "No enough data."
 	} else {
 		var message string
 		for idx, statistic := range statistics {
