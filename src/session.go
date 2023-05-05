@@ -17,7 +17,7 @@ func InitSession() {
 	sessionOnce.Do(func() {
 		bot, err := tgbotapi.NewBotAPI(token)
 		if err != nil {
-			log.Fatal("err")
+			log.Fatal(err)
 		}
 
 		u := tgbotapi.NewUpdate(0)

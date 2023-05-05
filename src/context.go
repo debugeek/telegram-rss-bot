@@ -6,8 +6,6 @@ import (
 	"sort"
 	"strconv"
 	"time"
-
-	_ "github.com/mattn/go-sqlite3"
 )
 
 type Context struct {
