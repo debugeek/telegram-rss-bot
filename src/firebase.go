@@ -3,7 +3,6 @@ package main
 import (
 	"context"
 	"encoding/base64"
-	"log"
 	"os"
 	"strconv"
 
@@ -21,7 +20,7 @@ type Firebase struct {
 	ctx       context.Context
 }
 
-func (fb *Firebase) InitDatabase() {
+func (fb *Firebase) Reload() {
 	var conf []byte
 	if len(args.FirebaseConf) != 0 {
 		conf, _ = base64.StdEncoding.DecodeString(args.FirebaseConf)
@@ -45,8 +44,6 @@ func (fb *Firebase) InitDatabase() {
 	} else {
 		fb.firestore = firestore
 	}
-
-	log.Println(`Firebase initialized`)
 }
 
 // Account
@@ -131,7 +128,7 @@ func (fb *Firebase) AddSubscription(account *Account, subscription *Subscription
 	id := strconv.FormatInt(account.Id, 10)
 
 	subscriptionRef := fb.firestore.Collection("assets").Doc(id).Collection("subscriptions").Doc(subscription.Id)
-	statisticRef := fb.firestore.Collection("statistics").Doc("subscriptions").Collection("subscribe_count").Doc(subscription.Id)
+	statisticRef := fb.firestore.Collection("statistics").Doc("subscriptions").Collection("subscribers_count").Doc(subscription.Id)
 
 	err := fb.firestore.RunTransaction(fb.ctx, func(ctx context.Context, tx *firestore.Transaction) error {
 		var statistic SubscriptionStatistic
@@ -168,11 +165,11 @@ func (fb *Firebase) AddSubscription(account *Account, subscription *Subscription
 	return err
 }
 
-func (fb *Firebase) DeleteSubscription(account *Account, subscription *Subscription) error {
+func (fb *Firebase) RemoveSubscription(account *Account, subscription *Subscription) error {
 	id := strconv.FormatInt(account.Id, 10)
 
 	subscriptionRef := fb.firestore.Collection("assets").Doc(id).Collection("subscriptions").Doc(subscription.Id)
-	statisticRef := fb.firestore.Collection("statistics").Doc("subscriptions").Collection("subscribe_count").Doc(subscription.Id)
+	statisticRef := fb.firestore.Collection("statistics").Doc("subscriptions").Collection("subscribers_count").Doc(subscription.Id)
 
 	err := fb.firestore.RunTransaction(fb.ctx, func(ctx context.Context, tx *firestore.Transaction) error {
 		var statistic SubscriptionStatistic
@@ -215,12 +212,12 @@ func (fb *Firebase) DeleteSubscription(account *Account, subscription *Subscript
 	return err
 }
 
-func (fb *Firebase) GetFeedCache(account *Account, subscription *Subscription) (map[string]interface{}, error) {
+func (fb *Firebase) GetRecentlyPublishedFeeds(account *Account, subscription *Subscription) (map[string]interface{}, error) {
 	id := strconv.FormatInt(account.Id, 10)
 
 	cache := make(map[string]interface{})
 
-	dsnap, err := fb.firestore.Collection("assets").Doc(id).Collection("caches").Doc(subscription.Id).Get(fb.ctx)
+	dsnap, err := fb.firestore.Collection("assets").Doc(id).Collection("published_feeds").Doc(subscription.Id).Get(fb.ctx)
 	if err != nil {
 		if status.Code(err) == codes.NotFound {
 			return cache, nil
@@ -235,18 +232,18 @@ func (fb *Firebase) GetFeedCache(account *Account, subscription *Subscription) (
 	}
 }
 
-func (fb *Firebase) SetFeedCache(account *Account, subscription *Subscription, cache map[string]interface{}) error {
+func (fb *Firebase) SetRecentlyPublishedFeeds(account *Account, subscription *Subscription, cache map[string]interface{}) error {
 	id := strconv.FormatInt(account.Id, 10)
 
-	_, err := fb.firestore.Collection("assets").Doc(id).Collection("caches").Doc(subscription.Id).Set(fb.ctx, cache)
+	_, err := fb.firestore.Collection("assets").Doc(id).Collection("published_feeds").Doc(subscription.Id).Set(fb.ctx, cache)
 
 	return err
 }
 
-func (fb *Firebase) DeleteFeedCache(account *Account, subscription *Subscription) error {
+func (fb *Firebase) ClearRecentlyPublishedFeeds(account *Account, subscription *Subscription) error {
 	id := strconv.FormatInt(account.Id, 10)
 
-	_, err := fb.firestore.Collection("assets").Doc(id).Collection("caches").Doc(subscription.Id).Delete(fb.ctx)
+	_, err := fb.firestore.Collection("assets").Doc(id).Collection("published_feeds").Doc(subscription.Id).Delete(fb.ctx)
 
 	return err
 }
@@ -257,7 +254,7 @@ func (fb *Firebase) GetTopSubscriptions(num int) ([]*SubscriptionStatistic, erro
 	statistics := make([]*SubscriptionStatistic, 0)
 
 	err := fb.firestore.RunTransaction(fb.ctx, func(ctx context.Context, tx *firestore.Transaction) error {
-		querier := fb.firestore.Collection("statistics").Doc("subscriptions").Collection("subscribe_count").OrderBy("count", firestore.Desc).Limit(num)
+		querier := fb.firestore.Collection("statistics").Doc("subscriptions").Collection("subscribers_count").OrderBy("count", firestore.Desc).Limit(num)
 		iter := tx.Documents(querier)
 		for {
 			doc, err := iter.Next()

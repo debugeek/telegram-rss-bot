@@ -1,5 +1,25 @@
 package main
 
+import "time"
+
+type Context struct {
+	id             int64
+	account        *Account
+	subscriptions  map[string]*Subscription
+	publishedFeeds map[string]map[string]interface{}
+}
+
+type Monitor struct {
+	observers map[string]map[int64]*Observer
+	ticker    *time.Ticker
+	quit      chan bool
+}
+
+type Observer struct {
+	identifier int64
+	handler    func(items []*Item)
+}
+
 type Account struct {
 	Id     int64 `firestore:"id"`
 	Kind   int   `firestore:"kind"`

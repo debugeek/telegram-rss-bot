@@ -16,16 +16,27 @@ var args struct {
 	FirebaseConfEnvKey string `arg:"--conf-env-key" help:"firebase service account base64 conf env key"`
 }
 
-func launch() {
-	InitDatabase()
-	InitSession()
-	InitMonitor()
-	InitContext()
+var session *Session
+
+func launch(token string) {
+	var db DatabaseProtocol
+	if len(args.FirebaseConf) != 0 || len(args.FirebaseConfEnvKey) != 0 {
+		db = &Firebase{}
+	} else {
+		db = &MemCache{}
+	}
+	db.Reload()
+
+	session = NewSession(token, db)
+	session.reload()
+	session.run()
+	log.Println(`Session did finish launching`)
 }
 
 func main() {
 	arg.MustParse(&args)
 
+	var token string
 	if len(args.Token) != 0 {
 		token = args.Token
 	} else if len(args.TokenEnvKey) != 0 {
@@ -38,7 +49,7 @@ func main() {
 	sigs := make(chan os.Signal, 1)
 	signal.Notify(sigs, syscall.SIGTERM, syscall.SIGINT)
 
-	go launch()
+	go launch(token)
 
 	<-sigs
 }

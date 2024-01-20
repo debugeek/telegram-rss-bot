@@ -1,44 +1,13 @@
 package main
 
 import (
-	"log"
-	"math/rand"
 	"time"
 )
 
-type Monitor struct {
-	observers map[string]map[int64]*Observer
-	ticker    *time.Ticker
-	quit      chan bool
-}
-
-type Observer struct {
-	identifier int64
-	handler    func(items []*Item)
-}
-
-func InitMonitor() {
-	monitorOnce.Do(func() {
-		monitor = &Monitor{
-			observers: make(map[string]map[int64]*Observer),
-		}
-	})
-	monitor.Run()
-	log.Println(`Monitor initialized`)
-}
-
-func (monitor *Monitor) Run() {
-	go monitor.RunLoop()
-}
-
-func (monitor *Monitor) Stop() {
-	monitor.quit <- true
-}
-
-func (monitor *Monitor) RunLoop() {
+func (monitor *Monitor) runLoop() {
 	monitor.refresh()
 
-	monitor.ticker = time.NewTicker(time.Duration(rand.Intn(60)) * time.Second)
+	monitor.ticker = time.NewTicker(time.Duration(60) * time.Second)
 	monitor.quit = make(chan bool)
 
 	for {
@@ -51,7 +20,7 @@ func (monitor *Monitor) RunLoop() {
 	}
 }
 
-func (monitor *Monitor) AddObserver(observer *Observer, link string) {
+func (monitor *Monitor) addObserver(observer *Observer, link string) {
 	observers := monitor.observers[link]
 	if observers == nil {
 		observers = make(map[int64]*Observer)
@@ -62,7 +31,7 @@ func (monitor *Monitor) AddObserver(observer *Observer, link string) {
 	monitor.refresh()
 }
 
-func (monitor *Monitor) RemoveObserver(identifier int64, link string) {
+func (monitor *Monitor) removeObserver(identifier int64, link string) {
 	observers := monitor.observers[link]
 	if observers == nil {
 		return
@@ -78,7 +47,7 @@ func (monitor *Monitor) refresh() {
 			continue
 		}
 
-		_, items, err := FetchItems(link)
+		_, items, err := fetchItems(link)
 		if len(items) == 0 || err != nil {
 			continue
 		}

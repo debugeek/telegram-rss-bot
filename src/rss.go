@@ -9,8 +9,8 @@ import (
 	"github.com/mmcdole/gofeed"
 )
 
-func FetchItems(url string) (*Channel, []*Item, error) {
-	feed, err := FetchFeed(url)
+func fetchItems(url string) (*Channel, []*Item, error) {
+	feed, err := fetchFeed(url)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -39,7 +39,7 @@ func FetchItems(url string) (*Channel, []*Item, error) {
 	return channel, items, nil
 }
 
-func FetchFeed(url string) (*gofeed.Feed, error) {
+func fetchFeed(url string) (*gofeed.Feed, error) {
 	req, err := http.NewRequest("GET", url, nil)
 	if err != nil {
 		return nil, err
