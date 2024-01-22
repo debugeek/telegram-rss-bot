@@ -16,7 +16,7 @@ func fetchItems(url string) (*Channel, []*Item, error) {
 	}
 
 	channel := &Channel{
-		id:          fmt.Sprintf("%x", md5.Sum([]byte(feed.Link))),
+		id:          getFeedID(feed),
 		title:       feed.Title,
 		description: feed.Description,
 		link:        url,
@@ -25,7 +25,7 @@ func fetchItems(url string) (*Channel, []*Item, error) {
 	var items []*Item
 	for _, item := range feed.Items {
 		items = append(items, &Item{
-			id:    fmt.Sprintf("%x", md5.Sum([]byte(item.GUID))),
+			id:    getItemID(item),
 			title: item.Title,
 			link:  item.Link,
 			date:  item.Published,
@@ -55,4 +55,26 @@ func fetchFeed(url string) (*gofeed.Feed, error) {
 	feed, err := parser.Parse(resp.Body)
 
 	return feed, err
+}
+
+func getFeedID(feed *gofeed.Feed) string {
+	var param string
+	if feed.Link != "" {
+		param = feed.Link
+	} else {
+		return ""
+	}
+	return fmt.Sprintf("%x", md5.Sum([]byte(param)))
+}
+
+func getItemID(item *gofeed.Item) string {
+	var param string
+	if item.GUID != "" {
+		param = item.GUID
+	} else if item.Link != "" {
+		param = item.Link
+	} else {
+		return ""
+	}
+	return fmt.Sprintf("%x", md5.Sum([]byte(param)))
 }
