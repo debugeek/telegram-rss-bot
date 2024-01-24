@@ -230,7 +230,7 @@ func (session *Session) processListCommand(context *Context) string {
 
 	var message string
 	for idx, subscription := range subscriptions {
-		message += fmt.Sprintf("%d. %s \n", idx+1, markdownLink(subscription.Title, subscription.Link))
+		message += fmt.Sprintf("%d. %s \n", idx+1, HTMLLink(subscription.Title, subscription.Link))
 	}
 	return message
 }
@@ -250,12 +250,12 @@ func (session *Session) processSubscribeCommand(context *Context, args string) s
 		return err.Error()
 	} else {
 		if len(items) == 0 {
-			return fmt.Sprintf(`%s subscribed.`, markdownLink(subscription.Title, subscription.Link))
+			return fmt.Sprintf(`%s subscribed.`, HTMLLink(subscription.Title, subscription.Link))
 		} else {
 			latestItem := items[len(items)-1]
 			return fmt.Sprintf(`%s subscribed. Here is the latest feed from the channel.
             
-%s`, markdownLink(subscription.Title, subscription.Link), markdownLink(latestItem.title, latestItem.link))
+%s`, HTMLLink(subscription.Title, subscription.Link), HTMLLink(latestItem.title, latestItem.link))
 		}
 	}
 }
@@ -279,7 +279,7 @@ func (session *Session) processUnsubscribeCommand(context *Context, args string)
 	} else if err := session.stopObserving(context, subscription); err != nil {
 		return err.Error()
 	} else {
-		return fmt.Sprintf(`%s unsubscribed.`, markdownLink(subscription.Title, subscription.Link))
+		return fmt.Sprintf(`%s unsubscribed.`, HTMLLink(subscription.Title, subscription.Link))
 	}
 }
 
@@ -291,7 +291,7 @@ func (session *Session) processTopSubscriptionsCommand(context *Context, args st
 	} else {
 		var message string
 		for idx, statistic := range statistics {
-			message += fmt.Sprintf("%d. %s (👥 %d)\n", idx+1, markdownLink(statistic.Subscription.Title, statistic.Subscription.Link), statistic.Count)
+			message += fmt.Sprintf("%d. %s (👥 %d)\n", idx+1, HTMLLink(statistic.Subscription.Title, statistic.Subscription.Link), statistic.Count)
 		}
 		return message
 	}
@@ -310,7 +310,7 @@ func (session *Session) send(context *Context, text string, disableWebPagePrevie
 			ReplyToMessageID: 0,
 		},
 		Text:                  text,
-		ParseMode:             "markdown",
+		ParseMode:             "HTML",
 		DisableWebPagePreview: disableWebPagePreview,
 	}
 	_, err := session.bot.Send(message)
@@ -331,7 +331,7 @@ func (session *Session) reply(context *Context, replyToMessageID int, text strin
 			ReplyToMessageID: replyToMessageID,
 		},
 		Text:                  text,
-		ParseMode:             "markdown",
+		ParseMode:             "HTML",
 		DisableWebPagePreview: disableWebPagePreview,
 	}
 	_, err := session.bot.Send(message)
@@ -388,13 +388,13 @@ func (session *Session) processFeedItems(context *Context, items []*Item, subscr
 	}
 
 	if len(newItems) == 1 {
-		session.send(context, markdownLink(newItems[0].title, newItems[0].link), false)
+		session.send(context, HTMLLink(newItems[0].title, newItems[0].link), false)
 	} else if len(newItems) > 1 {
 		posts := ""
 		count := 0
 
 		for _, item := range newItems {
-			post := fmt.Sprintf("%s\n", markdownLink(item.title, item.link))
+			post := fmt.Sprintf("%s\n", HTMLLink(item.title, item.link))
 
 			if len(posts)+len(post) > 4096 {
 				disableWebPagePreview := count > 0
@@ -424,7 +424,7 @@ func (session *Session) subscribe(context *Context, channel *Channel) (*Subscrip
 
 	subscription := context.subscriptions[id]
 	if subscription != nil {
-		return nil, fmt.Errorf(`Subscription %s exists`, markdownLink(subscription.Title, subscription.Link))
+		return nil, fmt.Errorf(`Subscription %s exists`, HTMLLink(subscription.Title, subscription.Link))
 	}
 
 	subscription = &Subscription{
@@ -464,8 +464,7 @@ func (session *Session) unsubscribe(context *Context, subscription *Subscription
 func (session *Session) updateRecentlyPublishedFeeds(context *Context, subscription *Subscription, items []*Item) error {
 	for _, item := range items {
 		context.publishedFeeds[subscription.Id][item.id] = map[string]interface{}{
-			"pushed":    true,
-			"timestamp": time.Now().Unix(),
+			"published-timestamp": time.Now().Unix(),
 		}
 	}
 	return session.db.SetRecentlyPublishedFeeds(context.account, subscription, context.publishedFeeds[subscription.Id])

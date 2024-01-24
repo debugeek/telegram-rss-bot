@@ -1,7 +1,8 @@
 package main
 
 import (
-	"fmt"
+	"bytes"
+	"html/template"
 	"net/url"
 	"strings"
 )
@@ -20,7 +21,27 @@ func isValidURL(text string) bool {
 	return true
 }
 
-func markdownLink(text string, link string) string {
-	repalcer := strings.NewReplacer("[", "【", "]", "】", "(", "（", ")", "）")
-	return fmt.Sprintf("[%s](%s)", repalcer.Replace(text), link)
+func HTMLLink(title string, url string) string {
+	tmpl, err := template.New("link").Parse(`<a href="{{.URL}}" title="{{.Title}}">{{.Title}}</a>`)
+	if err != nil {
+		return ""
+	}
+
+	repalcer := strings.NewReplacer("&amp;", "&", "&lt;", "<", "&gt;", ">", "&quot;", "\"", "&apos;", "'")
+
+	data := struct {
+		Title template.HTML
+		URL   template.URL
+	}{
+		Title: template.HTML(repalcer.Replace(title)),
+		URL:   template.URL(url),
+	}
+
+	var buffer bytes.Buffer
+	err = tmpl.Execute(&buffer, data)
+	if err != nil {
+		return ""
+	}
+
+	return buffer.String()
 }
