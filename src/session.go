@@ -387,31 +387,8 @@ func (session *Session) processFeedItems(context *Context, items []*Item, subscr
 		needsUpdate = true
 	}
 
-	if len(newItems) == 1 {
-		session.send(context, HTMLLink(newItems[0].title, newItems[0].link), false)
-	} else if len(newItems) > 1 {
-		posts := ""
-		count := 0
-
-		for _, item := range newItems {
-			post := fmt.Sprintf("%s\n", HTMLLink(item.title, item.link))
-
-			if len(posts)+len(post) > 4096 {
-				disableWebPagePreview := count > 0
-				session.send(context, posts, disableWebPagePreview)
-
-				posts = ""
-				count = 0
-			}
-
-			posts += post
-			count += 1
-		}
-
-		if len(posts) > 0 {
-			disableWebPagePreview := count > 1
-			session.send(context, posts, disableWebPagePreview)
-		}
+	for _, item := range newItems {
+		session.send(context, HTMLLink(item.title, item.link), false)
 	}
 
 	if needsUpdate {
