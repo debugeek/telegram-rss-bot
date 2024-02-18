@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"sort"
 
+	"github.com/debugeek/randua"
 	"github.com/mmcdole/gofeed"
 )
 
@@ -44,7 +45,7 @@ func fetchFeed(url string) (*gofeed.Feed, error) {
 	if err != nil {
 		return nil, err
 	}
-	req.Header.Set("User-Agent", "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_4) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/83.0.4103.97 Safari/537.36")
+	req.Header.Set("User-Agent", randua.GetRandomUserAgent())
 
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
