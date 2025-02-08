@@ -2,9 +2,14 @@ package main
 
 import "time"
 
-type Context struct {
-	id             int64
-	account        *Account
+const (
+	errTelegramBotTokenNotFound = "telegram bot token not found"
+
+	errFirebaseCredentialNotFound = "firebase credential not found"
+	errFirebaseDatabaseNotFound   = "firebase database not found"
+)
+
+type UserData struct {
 	subscriptions  map[string]*Subscription
 	publishedFeeds map[string]map[string]interface{}
 }
@@ -18,12 +23,6 @@ type Monitor struct {
 type Observer struct {
 	identifier int64
 	handler    func(items []*Item)
-}
-
-type Account struct {
-	Id     int64 `firestore:"id"`
-	Kind   int   `firestore:"kind"`
-	Status int   `firestore:"status"`
 }
 
 type Subscription struct {
@@ -51,3 +50,10 @@ type SubscriptionStatistic struct {
 	Count        int64         `firestore:"count"`
 	Subscription *Subscription `firestore:"subscription"`
 }
+
+const (
+	CmdList   = "list"
+	CmdAdd    = "add"
+	CmdDelete = "delete"
+	CmdTop    = "top"
+)
