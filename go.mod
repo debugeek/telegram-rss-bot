@@ -8,7 +8,7 @@ require (
 	cloud.google.com/go/firestore v1.17.0
 	firebase.google.com/go v3.13.0+incompatible
 	github.com/alexflint/go-arg v1.4.3
-	github.com/debugeek/telegram-bot v0.0.0-20250208144637-4baee3a3632d
+	github.com/debugeek/telegram-bot v0.0.0-20250209033225-e45f637f10c9
 	github.com/gabriel-vasile/mimetype v1.4.8
 	github.com/go-telegram-bot-api/telegram-bot-api v4.6.4+incompatible
 	github.com/mmcdole/gofeed v1.2.1

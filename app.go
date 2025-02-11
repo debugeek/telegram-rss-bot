@@ -61,10 +61,10 @@ func (app *App) launch() {
 		FirebaseCredential:  firebaseCredential,
 		FirebaseDatabaseURL: firebaseDatabaseURL,
 	}, app)
-	bot.RegisterCustomCommandHandler(CmdList, app.processListCommand)
-	bot.RegisterCustomCommandHandler(CmdAdd, app.processAddCommand)
-	bot.RegisterCustomCommandHandler(CmdDelete, app.processDeleteCommand)
-	bot.RegisterCustomCommandHandler(CmdTop, app.processTopCommand)
+	bot.RegisterCommandHandler(CmdList, app.processListCommand)
+	bot.RegisterCommandHandler(CmdAdd, app.processAddCommand)
+	bot.RegisterCommandHandler(CmdDelete, app.processDeleteCommand)
+	bot.RegisterCommandHandler(CmdTop, app.processTopCommand)
 
 	app.bot = bot
 
@@ -98,19 +98,18 @@ func (app *App) DidLoadUser(session *tgbot.Session[UserData], user *tgbot.User[U
 	}
 }
 
-func (app *App) processListCommand(session *tgbot.Session[UserData], message *tgbotapi.Message) bool {
+func (app *App) processListCommand(session *tgbot.Session[UserData], args string, message *tgbotapi.Message) tgbot.CmdResult {
 	session.ReplyTextUsingParseMode(app.formattedSubscriptionList(session), message.MessageID, "HTML")
-	return true
+	return tgbot.CmdResultProcessed
 }
 
-func (app *App) processAddCommand(session *tgbot.Session[UserData], message *tgbotapi.Message) bool {
-	url := message.CommandArguments()
-	if len(url) == 0 || !isValidURL(url) {
-		session.ReplyText("Unable to parse the url.", message.MessageID)
-		return true
+func (app *App) processAddCommand(session *tgbot.Session[UserData], args string, message *tgbotapi.Message) tgbot.CmdResult {
+	if len(args) == 0 {
+		session.ReplyText("Send me a link to subscribe.", message.MessageID)
+		return tgbot.CmdResultWaitingForInput
 	}
 
-	if channel, items, err := fetchItems(url); err != nil {
+	if channel, items, err := fetchItems(args); err != nil {
 		session.ReplyText(err.Error(), message.MessageID)
 	} else if subscription, err := app.subscribe(session, channel); err != nil {
 		session.ReplyText(err.Error(), message.MessageID)
@@ -136,28 +135,35 @@ func (app *App) processAddCommand(session *tgbot.Session[UserData], message *tgb
 				"HTML")
 		}
 	}
-	return true
+	return tgbot.CmdResultProcessed
 }
 
-func (app *App) processDeleteCommand(session *tgbot.Session[UserData], message *tgbotapi.Message) bool {
-	subscriptions := app.getSubscriptions(session)
-
-	arg := message.CommandArguments()
-	index, err := strconv.Atoi(arg)
-	if err != nil || index <= 0 || index > len(subscriptions) {
+func (app *App) processDeleteCommand(session *tgbot.Session[UserData], args string, message *tgbotapi.Message) tgbot.CmdResult {
+	if len(args) == 0 {
 		session.ReplyTextUsingParseMode(
 			fmt.Sprintf(
-				"Invalid index.\n\n%s",
+				"Send me an index to unsubscribe.\n\n%s",
 				app.formattedSubscriptionList(session)),
 			message.MessageID,
 			"HTML")
-		return true
+		return tgbot.CmdResultWaitingForInput
+	}
+
+	index, err := strconv.Atoi(args)
+	subscriptions := app.getSubscriptions(session)
+	if err != nil || index <= 0 || index > len(subscriptions) {
+		session.ReplyTextUsingParseMode(
+			fmt.Sprintf(
+				"Send me a valid index to unsubscribe.\n\n%s",
+				app.formattedSubscriptionList(session)),
+			message.MessageID,
+			"HTML")
+		return tgbot.CmdResultWaitingForInput
 	}
 
 	index -= 1
 
 	subscription := subscriptions[index]
-
 	if err := app.unsubscribe(session, subscription); err != nil {
 		session.ReplyText(err.Error(), message.MessageID)
 	} else if err := app.stopObserving(session, subscription); err != nil {
@@ -168,10 +174,10 @@ func (app *App) processDeleteCommand(session *tgbot.Session[UserData], message *
 			message.MessageID,
 			"HTML")
 	}
-	return true
+	return tgbot.CmdResultProcessed
 }
 
-func (app *App) processTopCommand(session *tgbot.Session[UserData], message *tgbotapi.Message) bool {
+func (app *App) processTopCommand(session *tgbot.Session[UserData], args string, message *tgbotapi.Message) tgbot.CmdResult {
 	if statistics, err := app.firebase.GetTopSubscriptions(5); err != nil {
 		session.ReplyText(err.Error(), message.MessageID)
 	} else if len(statistics) == 0 {
@@ -186,7 +192,7 @@ func (app *App) processTopCommand(session *tgbot.Session[UserData], message *tgb
 		}
 		session.ReplyTextUsingParseMode(text, message.MessageID, "HTML")
 	}
-	return true
+	return tgbot.CmdResultProcessed
 }
 
 func (app *App) getSubscriptions(session *tgbot.Session[UserData]) []*Subscription {

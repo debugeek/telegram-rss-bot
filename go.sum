@@ -65,6 +65,12 @@ github.com/debugeek/telegram-bot v0.0.0-20250208142016-dc4709cad845 h1:+qjKGm+EK
 github.com/debugeek/telegram-bot v0.0.0-20250208142016-dc4709cad845/go.mod h1:skLKDYBFDC85MvHwxJoh4Mc9rHudGQ538foz+NFsVVA=
 github.com/debugeek/telegram-bot v0.0.0-20250208144637-4baee3a3632d h1:6JtkTFn51gydDyKaVLnTJ13LqFiYim+G3aFRCtzjh4M=
 github.com/debugeek/telegram-bot v0.0.0-20250208144637-4baee3a3632d/go.mod h1:skLKDYBFDC85MvHwxJoh4Mc9rHudGQ538foz+NFsVVA=
+github.com/debugeek/telegram-bot v0.0.0-20250209033225-2f24a95c5a64 h1:UuhH66qBx0tzboH5O4R6pXdknrXx7AzmcaZbyYKwses=
+github.com/debugeek/telegram-bot v0.0.0-20250209033225-2f24a95c5a64/go.mod h1:skLKDYBFDC85MvHwxJoh4Mc9rHudGQ538foz+NFsVVA=
+github.com/debugeek/telegram-bot v0.0.0-20250209033225-3f769c09f7c8 h1:ofRjJ67tH9e4Ln925v+Sqf2CzgLe+jbhii08knH1z1M=
+github.com/debugeek/telegram-bot v0.0.0-20250209033225-3f769c09f7c8/go.mod h1:skLKDYBFDC85MvHwxJoh4Mc9rHudGQ538foz+NFsVVA=
+github.com/debugeek/telegram-bot v0.0.0-20250209033225-e45f637f10c9 h1:j8HTrIBxGzPKMoykpZfa50R0/FxVbpri5M1wH7EsAok=
+github.com/debugeek/telegram-bot v0.0.0-20250209033225-e45f637f10c9/go.mod h1:skLKDYBFDC85MvHwxJoh4Mc9rHudGQ538foz+NFsVVA=
 github.com/envoyproxy/go-control-plane v0.9.0/go.mod h1:YTl/9mNaCwkRvm6d1a2C3ymFceY/DCBVvsKhRF0iEA4=
 github.com/envoyproxy/go-control-plane v0.9.1-0.20191026205805-5f8ba28d4473/go.mod h1:YTl/9mNaCwkRvm6d1a2C3ymFceY/DCBVvsKhRF0iEA4=
 github.com/envoyproxy/go-control-plane v0.9.4/go.mod h1:6rpuAdCZL397s3pYoYcLgu1mIlRU8Am5FuJP05cCM98=
