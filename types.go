@@ -9,6 +9,9 @@ const (
 	errFirebaseDatabaseNotFound   = "firebase database not found"
 )
 
+type BotData struct {
+}
+
 type UserData struct {
 	subscriptions  map[string]*Subscription
 	publishedFeeds map[string]map[string]interface{}

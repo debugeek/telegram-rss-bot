@@ -23,7 +23,7 @@ var args struct {
 }
 
 type App struct {
-	bot      *tgbot.TgBot[UserData]
+	bot      *tgbot.TgBot[BotData, UserData]
 	firebase Firebase
 	monitor  *Monitor
 }
@@ -56,7 +56,7 @@ func (app *App) launch() {
 		panic(errors.New(errFirebaseDatabaseNotFound))
 	}
 
-	bot := tgbot.NewBot[UserData](tgbot.Config{
+	bot := tgbot.NewBot(tgbot.Config{
 		TelegramBotToken:    telegramBotToken,
 		FirebaseCredential:  firebaseCredential,
 		FirebaseDatabaseURL: firebaseDatabaseURL,
@@ -81,7 +81,11 @@ func (app *App) launch() {
 	go app.monitor.runLoop()
 }
 
-func (app *App) DidLoadUser(session *tgbot.Session[UserData], user *tgbot.User[UserData]) {
+func (app *App) NewUserData() UserData {
+	return UserData{}
+}
+
+func (app *App) DidLoadUser(session *tgbot.Session[BotData, UserData], user *tgbot.User[UserData]) {
 	user.UserData.subscriptions = make(map[string]*Subscription)
 	user.UserData.publishedFeeds = make(map[string]map[string]interface{})
 
@@ -98,12 +102,19 @@ func (app *App) DidLoadUser(session *tgbot.Session[UserData], user *tgbot.User[U
 	}
 }
 
-func (app *App) processListCommand(session *tgbot.Session[UserData], args string, message *tgbotapi.Message) tgbot.CmdResult {
-	session.ReplyTextUsingParseMode(app.formattedSubscriptionList(session), message.MessageID, "HTML")
+func (app *App) DidLoadPreference() {
+
+}
+
+func (app *App) processListCommand(session *tgbot.Session[BotData, UserData], args string, message *tgbotapi.Message) tgbot.CmdResult {
+	session.SendTextWithConfig(app.formattedSubscriptionList(session), tgbot.MessageConfig{
+		ReplyToMessageID: message.MessageID,
+		ParseMode:        tgbot.ParseModeHTML,
+	})
 	return tgbot.CmdResultProcessed
 }
 
-func (app *App) processAddCommand(session *tgbot.Session[UserData], args string, message *tgbotapi.Message) tgbot.CmdResult {
+func (app *App) processAddCommand(session *tgbot.Session[BotData, UserData], args string, message *tgbotapi.Message) tgbot.CmdResult {
 	if len(args) == 0 {
 		session.ReplyText("Send me a link to subscribe.", message.MessageID)
 		return tgbot.CmdResultWaitingForInput
@@ -119,45 +130,54 @@ func (app *App) processAddCommand(session *tgbot.Session[UserData], args string,
 		session.ReplyText(err.Error(), message.MessageID)
 	} else {
 		if len(items) == 0 {
-			session.ReplyTextUsingParseMode(
+			session.SendTextWithConfig(
 				fmt.Sprintf(
 					"%s subscribed.",
 					HTMLLink(subscription.Title, subscription.Link)),
-				message.MessageID, "HTML")
+				tgbot.MessageConfig{
+					ReplyToMessageID: message.MessageID,
+					ParseMode:        tgbot.ParseModeHTML,
+				})
 		} else {
 			latestItem := items[len(items)-1]
-			session.ReplyTextUsingParseMode(
+			session.SendTextWithConfig(
 				fmt.Sprintf(
 					"%s subscribed. Here is the latest feed from the channel.\n\n%s",
 					HTMLLink(subscription.Title, subscription.Link),
 					HTMLLink(latestItem.title, latestItem.link)),
-				message.MessageID,
-				"HTML")
+				tgbot.MessageConfig{
+					ReplyToMessageID: message.MessageID,
+					ParseMode:        tgbot.ParseModeHTML,
+				})
 		}
 	}
 	return tgbot.CmdResultProcessed
 }
 
-func (app *App) processDeleteCommand(session *tgbot.Session[UserData], args string, message *tgbotapi.Message) tgbot.CmdResult {
+func (app *App) processDeleteCommand(session *tgbot.Session[BotData, UserData], args string, message *tgbotapi.Message) tgbot.CmdResult {
 	if len(args) == 0 {
-		session.ReplyTextUsingParseMode(
+		session.SendTextWithConfig(
 			fmt.Sprintf(
 				"Send me an index to unsubscribe.\n\n%s",
 				app.formattedSubscriptionList(session)),
-			message.MessageID,
-			"HTML")
+			tgbot.MessageConfig{
+				ReplyToMessageID: message.MessageID,
+				ParseMode:        tgbot.ParseModeHTML,
+			})
 		return tgbot.CmdResultWaitingForInput
 	}
 
 	index, err := strconv.Atoi(args)
 	subscriptions := app.getSubscriptions(session)
 	if err != nil || index <= 0 || index > len(subscriptions) {
-		session.ReplyTextUsingParseMode(
+		session.SendTextWithConfig(
 			fmt.Sprintf(
 				"Send me a valid index to unsubscribe.\n\n%s",
 				app.formattedSubscriptionList(session)),
-			message.MessageID,
-			"HTML")
+			tgbot.MessageConfig{
+				ReplyToMessageID: message.MessageID,
+				ParseMode:        tgbot.ParseModeHTML,
+			})
 		return tgbot.CmdResultWaitingForInput
 	}
 
@@ -169,15 +189,17 @@ func (app *App) processDeleteCommand(session *tgbot.Session[UserData], args stri
 	} else if err := app.stopObserving(session, subscription); err != nil {
 		session.ReplyText(err.Error(), message.MessageID)
 	} else {
-		session.ReplyTextUsingParseMode(
+		session.SendTextWithConfig(
 			fmt.Sprintf("%s unsubscribed.", HTMLLink(subscription.Title, subscription.Link)),
-			message.MessageID,
-			"HTML")
+			tgbot.MessageConfig{
+				ReplyToMessageID: message.MessageID,
+				ParseMode:        tgbot.ParseModeHTML,
+			})
 	}
 	return tgbot.CmdResultProcessed
 }
 
-func (app *App) processTopCommand(session *tgbot.Session[UserData], args string, message *tgbotapi.Message) tgbot.CmdResult {
+func (app *App) processTopCommand(session *tgbot.Session[BotData, UserData], args string, message *tgbotapi.Message) tgbot.CmdResult {
 	if statistics, err := app.firebase.GetTopSubscriptions(5); err != nil {
 		session.ReplyText(err.Error(), message.MessageID)
 	} else if len(statistics) == 0 {
@@ -190,12 +212,15 @@ func (app *App) processTopCommand(session *tgbot.Session[UserData], args string,
 				HTMLLink(statistic.Subscription.Title, statistic.Subscription.Link),
 				statistic.Count)
 		}
-		session.ReplyTextUsingParseMode(text, message.MessageID, "HTML")
+		session.SendTextWithConfig(text, tgbot.MessageConfig{
+			ReplyToMessageID: message.MessageID,
+			ParseMode:        tgbot.ParseModeHTML,
+		})
 	}
 	return tgbot.CmdResultProcessed
 }
 
-func (app *App) getSubscriptions(session *tgbot.Session[UserData]) []*Subscription {
+func (app *App) getSubscriptions(session *tgbot.Session[BotData, UserData]) []*Subscription {
 	subscriptions := make([]*Subscription, 0)
 	for _, subscription := range session.User.UserData.subscriptions {
 		subscriptions = append(subscriptions, subscription)
@@ -208,7 +233,7 @@ func (app *App) getSubscriptions(session *tgbot.Session[UserData]) []*Subscripti
 	return subscriptions
 }
 
-func (app *App) formattedSubscriptionList(session *tgbot.Session[UserData]) string {
+func (app *App) formattedSubscriptionList(session *tgbot.Session[BotData, UserData]) string {
 	subscriptions := app.getSubscriptions(session)
 	if len(subscriptions) == 0 {
 		return "Your list is empty."
@@ -220,7 +245,7 @@ func (app *App) formattedSubscriptionList(session *tgbot.Session[UserData]) stri
 	return message
 }
 
-func (app *App) updateRecentlyPublishedFeeds(session *tgbot.Session[UserData], subscription *Subscription, items []*Item) error {
+func (app *App) updateRecentlyPublishedFeeds(session *tgbot.Session[BotData, UserData], subscription *Subscription, items []*Item) error {
 	for _, item := range items {
 		session.User.UserData.publishedFeeds[subscription.Id][item.id] = map[string]interface{}{
 			"published-timestamp": time.Now().Unix(),
@@ -229,7 +254,7 @@ func (app *App) updateRecentlyPublishedFeeds(session *tgbot.Session[UserData], s
 	return app.firebase.SetRecentlyPublishedFeeds(session.User.ID, subscription, session.User.UserData.publishedFeeds[subscription.Id])
 }
 
-func (app *App) subscribe(session *tgbot.Session[UserData], channel *Channel) (*Subscription, error) {
+func (app *App) subscribe(session *tgbot.Session[BotData, UserData], channel *Channel) (*Subscription, error) {
 	id := channel.id
 
 	subscription := session.User.UserData.subscriptions[id]
@@ -254,7 +279,7 @@ func (app *App) subscribe(session *tgbot.Session[UserData], channel *Channel) (*
 	return subscription, nil
 }
 
-func (app *App) unsubscribe(session *tgbot.Session[UserData], subscription *Subscription) error {
+func (app *App) unsubscribe(session *tgbot.Session[BotData, UserData], subscription *Subscription) error {
 	err := app.firebase.RemoveSubscription(session.User.ID, subscription)
 	if err != nil {
 		return err
@@ -270,7 +295,7 @@ func (app *App) unsubscribe(session *tgbot.Session[UserData], subscription *Subs
 	return err
 }
 
-func (app *App) startObserving(session *tgbot.Session[UserData], subscription *Subscription) error {
+func (app *App) startObserving(session *tgbot.Session[BotData, UserData], subscription *Subscription) error {
 	observer := &Observer{
 		identifier: session.ID,
 		handler: func(items []*Item) {
@@ -281,12 +306,12 @@ func (app *App) startObserving(session *tgbot.Session[UserData], subscription *S
 	return nil
 }
 
-func (app *App) stopObserving(session *tgbot.Session[UserData], subscription *Subscription) error {
+func (app *App) stopObserving(session *tgbot.Session[BotData, UserData], subscription *Subscription) error {
 	app.monitor.removeObserver(session.User.ID, subscription.Link)
 	return nil
 }
 
-func (app *App) processFeedItems(session *tgbot.Session[UserData], items []*Item, subscription *Subscription) {
+func (app *App) processFeedItems(session *tgbot.Session[BotData, UserData], items []*Item, subscription *Subscription) {
 	if len(items) == 0 || subscription == nil {
 		return
 	}
@@ -325,7 +350,9 @@ func (app *App) processFeedItems(session *tgbot.Session[UserData], items []*Item
 	}
 
 	for _, item := range newItems {
-		session.SendTextUsingParseMode(HTMLLink(item.title, item.link), "HTML")
+		session.SendTextWithConfig(HTMLLink(item.title, item.link), tgbot.MessageConfig{
+			ParseMode: tgbot.ParseModeHTML,
+		})
 	}
 
 	if needsUpdate {
