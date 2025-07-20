@@ -7,7 +7,7 @@ toolchain go1.23.4
 require (
 	cloud.google.com/go/firestore v1.17.0
 	github.com/alexflint/go-arg v1.4.3
-	github.com/debugeek/telegram-bot v0.0.0-20250720023630-0604299d7f4b
+	github.com/debugeek/telegram-bot v0.0.0-20250720032217-4abe3cacba9a
 	github.com/go-telegram-bot-api/telegram-bot-api v4.6.4+incompatible
 	github.com/mmcdole/gofeed v1.2.1
 	google.golang.org/api v0.214.0
