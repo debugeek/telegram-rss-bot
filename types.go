@@ -33,6 +33,7 @@ type Subscription struct {
 	Link      string `firestore:"link"`
 	Title     string `firestore:"title"`
 	Timestamp int64  `firestore:"timestamp"`
+	Topic     int    `firestore:"topic"`
 }
 
 type Channel struct {
@@ -55,8 +56,9 @@ type SubscriptionStatistic struct {
 }
 
 const (
-	CmdList   = "list"
-	CmdAdd    = "add"
-	CmdDelete = "delete"
-	CmdTop    = "top"
+	CmdList     = "list"
+	CmdAdd      = "add"
+	CmdDelete   = "delete"
+	CmdTop      = "top"
+	CmdSetTopic = "settopic"
 )

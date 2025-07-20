@@ -65,6 +65,7 @@ func (app *App) launch() {
 	bot.RegisterCommandHandler(CmdAdd, app.processAddCommand)
 	bot.RegisterCommandHandler(CmdDelete, app.processDeleteCommand)
 	bot.RegisterCommandHandler(CmdTop, app.processTopCommand)
+	bot.RegisterCommandHandler(CmdSetTopic, app.processSetTopicCommand)
 
 	app.bot = bot
 
@@ -220,6 +221,68 @@ func (app *App) processTopCommand(session *tgbot.Session[BotData, UserData], arg
 	return tgbot.CmdResultProcessed
 }
 
+func (app *App) processSetTopicCommand(session *tgbot.Session[BotData, UserData], args string, message *tgbotapi.Message) tgbot.CmdResult {
+	if _, ok := session.CommandSession.Args["index"]; !ok {
+		index, err := strconv.Atoi(args)
+		if err != nil || index <= 0 || index > len(app.getSubscriptions(session)) {
+			session.SendTextWithConfig("Send me a valid index number.", tgbot.MessageConfig{
+				ReplyToMessageID: message.MessageID,
+				ParseMode:        tgbot.ParseModeHTML,
+			})
+			return tgbot.CmdResultWaitingForInput
+		}
+		session.CommandSession.Args["index"] = index
+		session.SendTextWithConfig("Now send me the new topic.", tgbot.MessageConfig{
+			ReplyToMessageID: message.MessageID,
+			ParseMode:        tgbot.ParseModeHTML,
+		})
+		return tgbot.CmdResultWaitingForInput
+	}
+
+	if _, ok := session.CommandSession.Args["topic"]; !ok {
+		topic, err := strconv.Atoi(args)
+		if err != nil || topic < 0 {
+			session.SendTextWithConfig("Topic cannot be empty. Please send a valid topic.", tgbot.MessageConfig{
+				ReplyToMessageID: message.MessageID,
+			})
+			return tgbot.CmdResultWaitingForInput
+		}
+
+		session.CommandSession.Args["topic"] = topic
+	}
+
+	indexVal, indexOk := session.CommandSession.Args["index"]
+	topicVal, topicOk := session.CommandSession.Args["topic"]
+
+	if !indexOk || !topicOk {
+		return tgbot.CmdResultProcessed
+	}
+
+	index, ok := indexVal.(int)
+	if !ok {
+		return tgbot.CmdResultProcessed
+	}
+
+	topic, ok := topicVal.(int)
+	if !ok {
+		return tgbot.CmdResultProcessed
+	}
+
+	subscriptions := app.getSubscriptions(session)
+	if index <= 0 || index > len(subscriptions) {
+		return tgbot.CmdResultProcessed
+	}
+	subscription := subscriptions[index-1]
+	subscription.Topic = topic
+	app.firebase.UpdateSubscription(session.User.ID, subscription)
+
+	session.SendTextWithConfig(fmt.Sprintf("Feeds from %s will now be sent to topic %d.", subscription.Title, topic), tgbot.MessageConfig{
+		ReplyToMessageID: message.MessageID,
+	})
+
+	return tgbot.CmdResultProcessed
+}
+
 func (app *App) getSubscriptions(session *tgbot.Session[BotData, UserData]) []*Subscription {
 	subscriptions := make([]*Subscription, 0)
 	for _, subscription := range session.User.UserData.subscriptions {
@@ -351,7 +414,8 @@ func (app *App) processFeedItems(session *tgbot.Session[BotData, UserData], item
 
 	for _, item := range newItems {
 		session.SendTextWithConfig(HTMLLink(item.title, item.link), tgbot.MessageConfig{
-			ParseMode: tgbot.ParseModeHTML,
+			ParseMode:        tgbot.ParseModeHTML,
+			ReplyToMessageID: subscription.Topic,
 		})
 	}
 

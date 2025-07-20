@@ -34,8 +34,8 @@ github.com/cncf/udpa/go v0.0.0-20191209042840-269d4d468f6f/go.mod h1:M8M6+tZqaGX
 github.com/davecgh/go-spew v1.1.0/go.mod h1:J7Y8YcW2NihsgmVo/mv3lAwl/skON4iLHjSsI+c5H38=
 github.com/davecgh/go-spew v1.1.1 h1:vj9j/u1bqnvCEfJOwUhtlOARqs3+rkHYY13jYWTU97c=
 github.com/davecgh/go-spew v1.1.1/go.mod h1:J7Y8YcW2NihsgmVo/mv3lAwl/skON4iLHjSsI+c5H38=
-github.com/debugeek/telegram-bot v0.0.0-20250419024729-8a35957eaa10 h1:k/DyOoccN5rNiJO0tsyrFKUdTzBYOBbQObxUMkzjwzo=
-github.com/debugeek/telegram-bot v0.0.0-20250419024729-8a35957eaa10/go.mod h1:skLKDYBFDC85MvHwxJoh4Mc9rHudGQ538foz+NFsVVA=
+github.com/debugeek/telegram-bot v0.0.0-20250720023630-0604299d7f4b h1:5ih3q/4jWVE/aELISKcn0xZsj7nbo1/r8CzvXk1p/lE=
+github.com/debugeek/telegram-bot v0.0.0-20250720023630-0604299d7f4b/go.mod h1:skLKDYBFDC85MvHwxJoh4Mc9rHudGQ538foz+NFsVVA=
 github.com/envoyproxy/go-control-plane v0.9.0/go.mod h1:YTl/9mNaCwkRvm6d1a2C3ymFceY/DCBVvsKhRF0iEA4=
 github.com/envoyproxy/go-control-plane v0.9.1-0.20191026205805-5f8ba28d4473/go.mod h1:YTl/9mNaCwkRvm6d1a2C3ymFceY/DCBVvsKhRF0iEA4=
 github.com/envoyproxy/go-control-plane v0.9.4/go.mod h1:6rpuAdCZL397s3pYoYcLgu1mIlRU8Am5FuJP05cCM98=

@@ -86,6 +86,14 @@ func (fb *Firebase) AddSubscription(userID int64, subscription *Subscription) er
 	return err
 }
 
+func (fb *Firebase) UpdateSubscription(userID int64, subscription *Subscription) error {
+	id := strconv.FormatInt(userID, 10)
+
+	_, err := fb.Firestore.Collection("assets").Doc(id).Collection("subscriptions").Doc(subscription.Id).Set(fb.Context, subscription)
+
+	return err
+}
+
 func (fb *Firebase) RemoveSubscription(userID int64, subscription *Subscription) error {
 	id := strconv.FormatInt(userID, 10)
 
