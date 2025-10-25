@@ -12,9 +12,14 @@ const (
 type BotData struct {
 }
 
+type FeedStatus struct {
+	PublishedItems      map[string]bool `firestore:"published-items"`
+	LatestPublishedTime time.Time `firestore:"latest-published-time"`
+}
+
 type UserData struct {
-	subscriptions  map[string]*Subscription
-	publishedFeeds map[string]map[string]interface{}
+	Feeds      map[string]*Feed `firestore:"feeds"`
+	FeedStatus map[string]*FeedStatus `firestore:"feed-status"`
 }
 
 type Monitor struct {
@@ -28,31 +33,19 @@ type Observer struct {
 	handler    func(items []*Item)
 }
 
-type Subscription struct {
-	Id        string `firestore:"id"`
-	Link      string `firestore:"link"`
-	Title     string `firestore:"title"`
-	Timestamp int64  `firestore:"timestamp"`
-	Topic     int    `firestore:"topic"`
-}
-
-type Channel struct {
-	id          string
-	title       string
-	description string
-	link        string
+type Feed struct {
+	Id             string    `firestore:"id"`
+	Link           string    `firestore:"link"`
+	Title          string    `firestore:"title"`
+	Topic          int       `firestore:"topic"`
+	SubscribedTime time.Time `firestore:"subscribed-time"`
 }
 
 type Item struct {
-	id    string
-	title string
-	link  string
-	date  string
-}
-
-type SubscriptionStatistic struct {
-	Count        int64         `firestore:"count"`
-	Subscription *Subscription `firestore:"subscription"`
+	Id            string
+	Title         string
+	Link          string
+	PublishedTime time.Time
 }
 
 const (

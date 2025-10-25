@@ -7,7 +7,6 @@ import (
 	"os"
 	"sort"
 	"strconv"
-	"time"
 
 	"github.com/alexflint/go-arg"
 	tgbot "github.com/debugeek/telegram-bot"
@@ -83,23 +82,26 @@ func (app *App) launch() {
 }
 
 func (app *App) NewUserData() UserData {
-	return UserData{}
+	return UserData{
+		Feeds:      make(map[string]*Feed),
+		FeedStatus: map[string]*FeedStatus{},
+	}
 }
 
 func (app *App) DidLoadUser(session *tgbot.Session[BotData, UserData], user *tgbot.User[UserData]) {
-	user.UserData.subscriptions = make(map[string]*Subscription)
-	user.UserData.publishedFeeds = make(map[string]map[string]interface{})
-
-	if subscriptions, err := app.firebase.GetSubscriptions(user.ID); err == nil {
-		for id, subscription := range subscriptions {
-			user.UserData.subscriptions[id] = subscription
-
-			if publishedFeeds, err := app.firebase.GetRecentlyPublishedFeeds(user.ID, subscription); err == nil {
-				user.UserData.publishedFeeds[id] = publishedFeeds
+	if user.UserData.Feeds == nil {
+		user.UserData.Feeds = make(map[string]*Feed)
+	}
+	if user.UserData.FeedStatus == nil {
+		user.UserData.FeedStatus = make(map[string]*FeedStatus)
+		for _, feed := range user.UserData.Feeds {
+			user.UserData.FeedStatus[feed.Id] = &FeedStatus{
+				PublishedItems: make(map[string]bool),
 			}
-
-			app.startObserving(session, subscription)
 		}
+	}
+	for _, feed := range user.UserData.Feeds {
+		app.startObserving(session, feed)
 	}
 }
 
@@ -108,7 +110,7 @@ func (app *App) DidLoadPreference() {
 }
 
 func (app *App) processListCommand(session *tgbot.Session[BotData, UserData], args string, message *tgbotapi.Message) tgbot.CmdResult {
-	session.SendTextWithConfig(app.formattedSubscriptionList(session), tgbot.MessageConfig{
+	session.SendTextWithConfig(app.formattedFeedList(session), tgbot.MessageConfig{
 		ReplyToMessageID: message.MessageID,
 		ParseMode:        tgbot.ParseModeHTML,
 	})
@@ -121,20 +123,18 @@ func (app *App) processAddCommand(session *tgbot.Session[BotData, UserData], arg
 		return tgbot.CmdResultWaitingForInput
 	}
 
-	if channel, items, err := fetchItems(args); err != nil {
+	if feed, items, err := fetchFeed(args); err != nil {
 		session.ReplyText(err.Error(), message.MessageID)
-	} else if subscription, err := app.subscribe(session, channel); err != nil {
+	} else if err := app.subscribe(session, feed, items); err != nil {
 		session.ReplyText(err.Error(), message.MessageID)
-	} else if err := app.updateRecentlyPublishedFeeds(session, subscription, items); err != nil {
-		session.ReplyText(err.Error(), message.MessageID)
-	} else if err := app.startObserving(session, subscription); err != nil {
+	} else if err := app.startObserving(session, feed); err != nil {
 		session.ReplyText(err.Error(), message.MessageID)
 	} else {
 		if len(items) == 0 {
 			session.SendTextWithConfig(
 				fmt.Sprintf(
 					"%s subscribed.",
-					HTMLLink(subscription.Title, subscription.Link)),
+					HTMLLink(feed.Title, feed.Link)),
 				tgbot.MessageConfig{
 					ReplyToMessageID: message.MessageID,
 					ParseMode:        tgbot.ParseModeHTML,
@@ -143,9 +143,9 @@ func (app *App) processAddCommand(session *tgbot.Session[BotData, UserData], arg
 			latestItem := items[len(items)-1]
 			session.SendTextWithConfig(
 				fmt.Sprintf(
-					"%s subscribed. Here is the latest feed from the channel.\n\n%s",
-					HTMLLink(subscription.Title, subscription.Link),
-					HTMLLink(latestItem.title, latestItem.link)),
+					"%s subscribed. Here is the latest feed from the feed.\n\n%s",
+					HTMLLink(feed.Title, feed.Link),
+					HTMLLink(latestItem.Title, latestItem.Link)),
 				tgbot.MessageConfig{
 					ReplyToMessageID: message.MessageID,
 					ParseMode:        tgbot.ParseModeHTML,
@@ -160,7 +160,7 @@ func (app *App) processDeleteCommand(session *tgbot.Session[BotData, UserData], 
 		session.SendTextWithConfig(
 			fmt.Sprintf(
 				"Send me an index to unsubscribe.\n\n%s",
-				app.formattedSubscriptionList(session)),
+				app.formattedFeedList(session)),
 			tgbot.MessageConfig{
 				ReplyToMessageID: message.MessageID,
 				ParseMode:        tgbot.ParseModeHTML,
@@ -169,12 +169,12 @@ func (app *App) processDeleteCommand(session *tgbot.Session[BotData, UserData], 
 	}
 
 	index, err := strconv.Atoi(args)
-	subscriptions := app.getSubscriptions(session)
-	if err != nil || index <= 0 || index > len(subscriptions) {
+	feeds := app.getFeeds(session)
+	if err != nil || index <= 0 || index > len(feeds) {
 		session.SendTextWithConfig(
 			fmt.Sprintf(
 				"Send me a valid index to unsubscribe.\n\n%s",
-				app.formattedSubscriptionList(session)),
+				app.formattedFeedList(session)),
 			tgbot.MessageConfig{
 				ReplyToMessageID: message.MessageID,
 				ParseMode:        tgbot.ParseModeHTML,
@@ -184,14 +184,14 @@ func (app *App) processDeleteCommand(session *tgbot.Session[BotData, UserData], 
 
 	index -= 1
 
-	subscription := subscriptions[index]
-	if err := app.unsubscribe(session, subscription); err != nil {
+	feed := feeds[index]
+	if err := app.unsubscribe(session, feed); err != nil {
 		session.ReplyText(err.Error(), message.MessageID)
-	} else if err := app.stopObserving(session, subscription); err != nil {
+	} else if err := app.stopObserving(session, feed); err != nil {
 		session.ReplyText(err.Error(), message.MessageID)
 	} else {
 		session.SendTextWithConfig(
-			fmt.Sprintf("%s unsubscribed.", HTMLLink(subscription.Title, subscription.Link)),
+			fmt.Sprintf("%s unsubscribed.", HTMLLink(feed.Title, feed.Link)),
 			tgbot.MessageConfig{
 				ReplyToMessageID: message.MessageID,
 				ParseMode:        tgbot.ParseModeHTML,
@@ -201,30 +201,55 @@ func (app *App) processDeleteCommand(session *tgbot.Session[BotData, UserData], 
 }
 
 func (app *App) processTopCommand(session *tgbot.Session[BotData, UserData], args string, message *tgbotapi.Message) tgbot.CmdResult {
-	if statistics, err := app.firebase.GetTopSubscriptions(5); err != nil {
-		session.ReplyText(err.Error(), message.MessageID)
-	} else if len(statistics) == 0 {
-		session.ReplyText("No enough data.", message.MessageID)
-	} else {
-		var text string
-		for idx, statistic := range statistics {
-			text += fmt.Sprintf("%d. %s (👥 %d)\n",
-				idx+1,
-				HTMLLink(statistic.Subscription.Title, statistic.Subscription.Link),
-				statistic.Count)
+	counter := make(map[string]int)
+	lookup := make(map[string]*Feed)
+
+	for _, s := range app.bot.Client.Sessions {
+		for _, feed := range s.User.UserData.Feeds {
+			counter[feed.Id]++
+			lookup[feed.Id] = feed
 		}
-		session.SendTextWithConfig(text, tgbot.MessageConfig{
-			ReplyToMessageID: message.MessageID,
-			ParseMode:        tgbot.ParseModeHTML,
+	}
+
+	type Candidate struct {
+		feed  *Feed
+		count int
+	}
+	var candidates []Candidate
+	for id, count := range counter {
+		candidates = append(candidates, Candidate{
+			feed:  lookup[id],
+			count: count,
 		})
 	}
+	if len(candidates) == 0 {
+		session.ReplyText("No enough data.", message.MessageID)
+		return tgbot.CmdResultProcessed
+	}
+
+	sort.Slice(candidates, func(i, j int) bool {
+		return candidates[i].count > candidates[j].count
+	})
+
+	var text string
+	for idx, candidate := range candidates {
+		text += fmt.Sprintf("%d. %s (👥 %d)\n",
+			idx+1,
+			HTMLLink(candidate.feed.Title, candidate.feed.Link),
+			candidate.count)
+	}
+	session.SendTextWithConfig(text, tgbot.MessageConfig{
+		ReplyToMessageID: message.MessageID,
+		ParseMode:        tgbot.ParseModeHTML,
+	})
+
 	return tgbot.CmdResultProcessed
 }
 
 func (app *App) processSetTopicCommand(session *tgbot.Session[BotData, UserData], args string, message *tgbotapi.Message) tgbot.CmdResult {
 	if _, ok := session.CommandSession.Args["index"]; !ok {
 		index, err := strconv.Atoi(args)
-		if err != nil || index <= 0 || index > len(app.getSubscriptions(session)) {
+		if err != nil || index <= 0 || index > len(app.getFeeds(session)) {
 			session.SendTextWithConfig("Send me a valid index number.", tgbot.MessageConfig{
 				ReplyToMessageID: message.MessageID,
 				ParseMode:        tgbot.ParseModeHTML,
@@ -268,158 +293,132 @@ func (app *App) processSetTopicCommand(session *tgbot.Session[BotData, UserData]
 		return tgbot.CmdResultProcessed
 	}
 
-	subscriptions := app.getSubscriptions(session)
-	if index <= 0 || index > len(subscriptions) {
+	feeds := app.getFeeds(session)
+	if index <= 0 || index > len(feeds) {
 		return tgbot.CmdResultProcessed
 	}
-	subscription := subscriptions[index-1]
-	subscription.Topic = topic
-	app.firebase.UpdateSubscription(session.User.ID, subscription)
+	feed := feeds[index-1]
+	session.User.UserData.Feeds[feed.Id].Topic = topic
+	app.firebase.UpdateUser(session.User)
 
-	session.SendTextWithConfig(fmt.Sprintf("Feeds from %s will now be sent to topic %d.", subscription.Title, topic), tgbot.MessageConfig{
+	session.SendTextWithConfig(fmt.Sprintf("Items from %s will now be sent to topic %d.", feed.Title, topic), tgbot.MessageConfig{
 		ReplyToMessageID: message.MessageID,
 	})
 
 	return tgbot.CmdResultProcessed
 }
 
-func (app *App) getSubscriptions(session *tgbot.Session[BotData, UserData]) []*Subscription {
-	subscriptions := make([]*Subscription, 0)
-	for _, subscription := range session.User.UserData.subscriptions {
-		subscriptions = append(subscriptions, subscription)
+func (app *App) getFeeds(session *tgbot.Session[BotData, UserData]) []*Feed {
+	feeds := make([]*Feed, 0)
+	for _, feed := range session.User.UserData.Feeds {
+		feeds = append(feeds, feed)
 	}
 
-	sort.SliceStable(subscriptions, func(i, j int) bool {
-		return subscriptions[i].Timestamp < subscriptions[j].Timestamp
+	sort.SliceStable(feeds, func(i, j int) bool {
+		return feeds[i].SubscribedTime.Before(feeds[j].SubscribedTime)
 	})
 
-	return subscriptions
+	return feeds
 }
 
-func (app *App) formattedSubscriptionList(session *tgbot.Session[BotData, UserData]) string {
-	subscriptions := app.getSubscriptions(session)
-	if len(subscriptions) == 0 {
+func (app *App) formattedFeedList(session *tgbot.Session[BotData, UserData]) string {
+	feeds := app.getFeeds(session)
+	if len(feeds) == 0 {
 		return "Your list is empty."
 	}
 	var message string
-	for idx, subscription := range subscriptions {
-		message += fmt.Sprintf("%d. %s \n", idx+1, HTMLLink(subscription.Title, subscription.Link))
+	for idx, feed := range feeds {
+		message += fmt.Sprintf("%d. %s \n", idx+1, HTMLLink(feed.Title, feed.Link))
 	}
 	return message
 }
 
-func (app *App) updateRecentlyPublishedFeeds(session *tgbot.Session[BotData, UserData], subscription *Subscription, items []*Item) error {
-	for _, item := range items {
-		session.User.UserData.publishedFeeds[subscription.Id][item.id] = map[string]interface{}{
-			"published-timestamp": time.Now().Unix(),
+func (app *App) subscribe(session *tgbot.Session[BotData, UserData], feed *Feed, items []*Item) error {
+	if session.User.UserData.Feeds[feed.Id] != nil {
+		return fmt.Errorf("Feed %s exists", HTMLLink(feed.Title, feed.Link))
+	}
+
+	latestPublishedTime := items[0].PublishedTime
+	for _, item := range items[1:] {
+		if item.PublishedTime.After(latestPublishedTime) {
+			latestPublishedTime = item.PublishedTime
 		}
 	}
-	return app.firebase.SetRecentlyPublishedFeeds(session.User.ID, subscription, session.User.UserData.publishedFeeds[subscription.Id])
+
+	session.User.UserData.Feeds[feed.Id] = feed
+	session.User.UserData.FeedStatus[feed.Id] = &FeedStatus{
+		PublishedItems:      make(map[string]bool),
+		LatestPublishedTime: latestPublishedTime,
+	}
+	return app.firebase.UpdateUser(session.User)
 }
 
-func (app *App) subscribe(session *tgbot.Session[BotData, UserData], channel *Channel) (*Subscription, error) {
-	id := channel.id
-
-	subscription := session.User.UserData.subscriptions[id]
-	if subscription != nil {
-		return nil, fmt.Errorf("Subscription %s exists", HTMLLink(subscription.Title, subscription.Link))
-	}
-
-	subscription = &Subscription{
-		Id:        id,
-		Link:      channel.link,
-		Title:     channel.title,
-		Timestamp: time.Now().Unix(),
-	}
-	session.User.UserData.subscriptions[id] = subscription
-	session.User.UserData.publishedFeeds[id] = make(map[string]interface{})
-
-	err := app.firebase.AddSubscription(session.User.ID, subscription)
-	if err != nil {
-		return nil, err
-	}
-
-	return subscription, nil
+func (app *App) unsubscribe(session *tgbot.Session[BotData, UserData], feed *Feed) error {
+	delete(session.User.UserData.Feeds, feed.Id)
+	delete(session.User.UserData.FeedStatus, feed.Id)
+	return app.firebase.UpdateUser(session.User)
 }
 
-func (app *App) unsubscribe(session *tgbot.Session[BotData, UserData], subscription *Subscription) error {
-	err := app.firebase.RemoveSubscription(session.User.ID, subscription)
-	if err != nil {
-		return err
-	}
-	delete(session.User.UserData.subscriptions, subscription.Id)
-
-	err = app.firebase.ClearRecentlyPublishedFeeds(session.User.ID, subscription)
-	if err != nil {
-		return err
-	}
-	delete(session.User.UserData.publishedFeeds, subscription.Id)
-
-	return err
-}
-
-func (app *App) startObserving(session *tgbot.Session[BotData, UserData], subscription *Subscription) error {
+func (app *App) startObserving(session *tgbot.Session[BotData, UserData], feed *Feed) error {
 	observer := &Observer{
 		identifier: session.ID,
 		handler: func(items []*Item) {
-			app.processFeedItems(session, items, subscription)
+			app.processFeedItems(session, items, feed)
 		},
 	}
-	app.monitor.addObserver(observer, subscription.Link)
+	app.monitor.addObserver(observer, feed.Link)
 	return nil
 }
 
-func (app *App) stopObserving(session *tgbot.Session[BotData, UserData], subscription *Subscription) error {
-	app.monitor.removeObserver(session.User.ID, subscription.Link)
+func (app *App) stopObserving(session *tgbot.Session[BotData, UserData], feed *Feed) error {
+	app.monitor.removeObserver(session.User.ID, feed.Link)
 	return nil
 }
 
-func (app *App) processFeedItems(session *tgbot.Session[BotData, UserData], items []*Item, subscription *Subscription) {
-	if len(items) == 0 || subscription == nil {
+func (app *App) processFeedItems(session *tgbot.Session[BotData, UserData], items []*Item, feed *Feed) {
+	if len(items) == 0 || feed == nil {
 		return
 	}
 
 	var needsUpdate = false
 
-	for id := range session.User.UserData.publishedFeeds[subscription.Id] {
-		published := false
-		for _, item := range items {
-			if item.id == id {
-				published = true
-				break
-			}
+	itemIDs := make(map[string]bool, len(items))
+	for _, item := range items {
+		itemIDs[item.Id] = true
+	}
+	for id := range session.User.UserData.FeedStatus[feed.Id].PublishedItems {
+		if _, exists := itemIDs[id]; !exists {
+			delete(session.User.UserData.FeedStatus[feed.Id].PublishedItems, id)
+			needsUpdate = true
 		}
-		if published {
-			continue
-		}
-
-		delete(session.User.UserData.publishedFeeds[subscription.Id], id)
-		needsUpdate = true
 	}
 
 	var newItems []*Item
 
 	for _, item := range items {
-		if session.User.UserData.publishedFeeds[subscription.Id][item.id] != nil {
+		if session.User.UserData.FeedStatus[feed.Id].PublishedItems[item.Id] {
 			continue
 		}
 
-		session.User.UserData.publishedFeeds[subscription.Id][item.id] = map[string]interface{}{
-			"published-timestamp": time.Now().Unix(),
+		if item.PublishedTime.Before(session.User.UserData.FeedStatus[feed.Id].LatestPublishedTime) {
+			continue
 		}
+
+		session.User.UserData.FeedStatus[feed.Id].LatestPublishedTime = item.PublishedTime
+		session.User.UserData.FeedStatus[feed.Id].PublishedItems[item.Id] = true
 
 		newItems = append(newItems, item)
 		needsUpdate = true
 	}
 
 	for _, item := range newItems {
-		session.SendTextWithConfig(HTMLLink(item.title, item.link), tgbot.MessageConfig{
+		session.SendTextWithConfig(HTMLLink(item.Title, item.Link), tgbot.MessageConfig{
 			ParseMode:        tgbot.ParseModeHTML,
-			ReplyToMessageID: subscription.Topic,
+			ReplyToMessageID: feed.Topic,
 		})
 	}
 
 	if needsUpdate {
-		app.firebase.SetRecentlyPublishedFeeds(session.User.ID, subscription, session.User.UserData.publishedFeeds[subscription.Id])
+		app.firebase.UpdateUser(session.User)
 	}
 }

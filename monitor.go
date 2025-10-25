@@ -47,7 +47,7 @@ func (monitor *Monitor) refresh() {
 			continue
 		}
 
-		_, items, err := fetchItems(link)
+		_, items, err := fetchFeed(link)
 		if len(items) == 0 || err != nil {
 			continue
 		}

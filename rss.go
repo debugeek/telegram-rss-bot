@@ -5,56 +5,48 @@ import (
 	"fmt"
 	"net/http"
 	"sort"
+	"time"
 
 	"github.com/mmcdole/gofeed"
 )
 
-func fetchItems(url string) (*Channel, []*Item, error) {
-	feed, err := fetchFeed(url)
-	if err != nil {
-		return nil, nil, err
-	}
-
-	channel := &Channel{
-		id:          getFeedID(feed),
-		title:       feed.Title,
-		description: feed.Description,
-		link:        url,
-	}
-
-	var items []*Item
-	for _, item := range feed.Items {
-		items = append(items, &Item{
-			id:    getItemID(item),
-			title: item.Title,
-			link:  item.Link,
-			date:  item.Published,
-		})
-	}
-
-	sort.Slice(items, func(i, j int) bool {
-		return items[i].date < items[j].date
-	})
-
-	return channel, items, nil
-}
-
-func fetchFeed(url string) (*gofeed.Feed, error) {
+func fetchFeed(url string) (*Feed, []*Item, error) {
 	req, err := http.NewRequest("GET", url, nil)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	req.Header.Set("User-Agent", "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_4) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/83.0.4103.97 Safari/537.36")
 
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 
 	parser := gofeed.NewParser()
 	feed, err := parser.Parse(resp.Body)
+	if err != nil {
+		return nil, nil, err
+	}
 
-	return feed, err
+	var items []*Item
+	for _, item := range feed.Items {
+		items = append(items, &Item{
+			Id:            getItemID(item),
+			Title:         item.Title,
+			Link:          item.Link,
+			PublishedTime: *item.PublishedParsed,
+		})
+	}
+	sort.Slice(items, func(i, j int) bool {
+		return items[i].PublishedTime.Before(items[j].PublishedTime)
+	})
+
+	return &Feed{
+		Id:             getFeedID(feed),
+		Link:           url,
+		Title:          feed.Title,
+		SubscribedTime: time.Now(),
+	}, items, nil
 }
 
 func getFeedID(feed *gofeed.Feed) string {
