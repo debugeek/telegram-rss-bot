@@ -394,17 +394,17 @@ func (app *App) processFeedItems(session *tgbot.Session[BotData, UserData], item
 	}
 
 	var newItems []*Item
-
+	latestPublishedTime := session.User.UserData.FeedStatus[feed.Id].LatestPublishedTime
 	for _, item := range items {
 		if session.User.UserData.FeedStatus[feed.Id].PublishedItems[item.Id] {
 			continue
 		}
-
-		if item.PublishedTime.Before(session.User.UserData.FeedStatus[feed.Id].LatestPublishedTime) {
+		if item.PublishedTime.Before(latestPublishedTime) {
 			continue
 		}
-
-		session.User.UserData.FeedStatus[feed.Id].LatestPublishedTime = item.PublishedTime
+		if item.PublishedTime.After(session.User.UserData.FeedStatus[feed.Id].LatestPublishedTime) {
+			session.User.UserData.FeedStatus[feed.Id].LatestPublishedTime = item.PublishedTime
+		}
 		session.User.UserData.FeedStatus[feed.Id].PublishedItems[item.Id] = true
 
 		newItems = append(newItems, item)
