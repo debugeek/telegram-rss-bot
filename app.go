@@ -7,6 +7,7 @@ import (
 	"os"
 	"sort"
 	"strconv"
+	"time"
 
 	"github.com/alexflint/go-arg"
 	tgbot "github.com/debugeek/telegram-bot"
@@ -94,10 +95,10 @@ func (app *App) DidLoadUser(session *tgbot.Session[BotData, UserData], user *tgb
 	}
 	if user.UserData.FeedStatus == nil {
 		user.UserData.FeedStatus = make(map[string]*FeedStatus)
-		for _, feed := range user.UserData.Feeds {
-			user.UserData.FeedStatus[feed.Id] = &FeedStatus{
-				PublishedItems: make(map[string]bool),
-			}
+	}
+	for _, feed := range user.UserData.Feeds {
+		user.UserData.FeedStatus[feed.Id] = &FeedStatus{
+			ItemLastSeen: make(map[string]time.Time),
 		}
 	}
 	for _, feed := range user.UserData.Feeds {
@@ -338,17 +339,9 @@ func (app *App) subscribe(session *tgbot.Session[BotData, UserData], feed *Feed,
 		return fmt.Errorf("Feed %s exists", HTMLLink(feed.Title, feed.Link))
 	}
 
-	latestPublishedTime := items[0].PublishedTime
-	for _, item := range items[1:] {
-		if item.PublishedTime.After(latestPublishedTime) {
-			latestPublishedTime = item.PublishedTime
-		}
-	}
-
 	session.User.UserData.Feeds[feed.Id] = feed
 	session.User.UserData.FeedStatus[feed.Id] = &FeedStatus{
-		PublishedItems:      make(map[string]bool),
-		LatestPublishedTime: latestPublishedTime,
+		ItemLastSeen: make(map[string]time.Time),
 	}
 	return app.firebase.UpdateUser(session.User)
 }
@@ -381,31 +374,28 @@ func (app *App) processFeedItems(session *tgbot.Session[BotData, UserData], item
 	}
 
 	var needsUpdate = false
+	now := time.Now()
 
 	itemIDs := make(map[string]bool, len(items))
 	for _, item := range items {
 		itemIDs[item.Id] = true
 	}
-	for id := range session.User.UserData.FeedStatus[feed.Id].PublishedItems {
-		if _, exists := itemIDs[id]; !exists {
-			delete(session.User.UserData.FeedStatus[feed.Id].PublishedItems, id)
+	for id, lastSeen := range session.User.UserData.FeedStatus[feed.Id].ItemLastSeen {
+		const itemRetention = 7 * 24 * time.Hour
+		if _, exists := itemIDs[id]; !exists && lastSeen.Before(now.Add(-itemRetention)) {
+			delete(session.User.UserData.FeedStatus[feed.Id].ItemLastSeen, id)
 			needsUpdate = true
 		}
 	}
 
 	var newItems []*Item
-	latestPublishedTime := session.User.UserData.FeedStatus[feed.Id].LatestPublishedTime
 	for _, item := range items {
-		if session.User.UserData.FeedStatus[feed.Id].PublishedItems[item.Id] {
+		if _, exists := session.User.UserData.FeedStatus[feed.Id].ItemLastSeen[item.Id]; exists {
+			session.User.UserData.FeedStatus[feed.Id].ItemLastSeen[item.Id] = now
 			continue
 		}
-		if item.PublishedTime.Before(latestPublishedTime) {
-			continue
-		}
-		if item.PublishedTime.After(session.User.UserData.FeedStatus[feed.Id].LatestPublishedTime) {
-			session.User.UserData.FeedStatus[feed.Id].LatestPublishedTime = item.PublishedTime
-		}
-		session.User.UserData.FeedStatus[feed.Id].PublishedItems[item.Id] = true
+
+		session.User.UserData.FeedStatus[feed.Id].ItemLastSeen[item.Id] = now
 
 		newItems = append(newItems, item)
 		needsUpdate = true

@@ -13,12 +13,11 @@ type BotData struct {
 }
 
 type FeedStatus struct {
-	PublishedItems      map[string]bool `firestore:"published-items"`
-	LatestPublishedTime time.Time `firestore:"latest-published-time"`
+	ItemLastSeen map[string]time.Time `firestore:"item-last-seen"`
 }
 
 type UserData struct {
-	Feeds      map[string]*Feed `firestore:"feeds"`
+	Feeds      map[string]*Feed       `firestore:"feeds"`
 	FeedStatus map[string]*FeedStatus `firestore:"feed-status"`
 }
 
