@@ -373,32 +373,53 @@ func (app *App) processFeedItems(session *tgbot.Session[BotData, UserData], item
 		return
 	}
 
-	var needsUpdate = false
+	const retention = 7 * 24 * time.Hour
+
+	needsUpdate := false
 	now := time.Now()
+	itemLastSeen := session.User.UserData.FeedStatus[feed.Id].ItemLastSeen
 
 	itemIDs := make(map[string]bool, len(items))
 	for _, item := range items {
 		itemIDs[item.Id] = true
 	}
-	for id, lastSeen := range session.User.UserData.FeedStatus[feed.Id].ItemLastSeen {
-		const itemRetention = 7 * 24 * time.Hour
-		if _, exists := itemIDs[id]; !exists && lastSeen.Before(now.Add(-itemRetention)) {
-			delete(session.User.UserData.FeedStatus[feed.Id].ItemLastSeen, id)
+	for id, lastSeen := range itemLastSeen {
+		if _, exists := itemIDs[id]; !exists && now.Sub(lastSeen) > retention {
+			delete(itemLastSeen, id)
 			needsUpdate = true
 		}
 	}
 
 	var newItems []*Item
 	for _, item := range items {
-		if _, exists := session.User.UserData.FeedStatus[feed.Id].ItemLastSeen[item.Id]; exists {
-			session.User.UserData.FeedStatus[feed.Id].ItemLastSeen[item.Id] = now
+		if _, exists := itemLastSeen[item.Id]; exists {
+			itemLastSeen[item.Id] = now
 			continue
 		}
 
-		session.User.UserData.FeedStatus[feed.Id].ItemLastSeen[item.Id] = now
+		itemLastSeen[item.Id] = now
+		needsUpdate = true
 
 		newItems = append(newItems, item)
-		needsUpdate = true
+	}
+
+	maxItems := min(len(items)+20, 100)
+	if len(itemLastSeen) > maxItems {
+		type KeyValue struct {
+			id string
+			ts time.Time
+		}
+		var kv []KeyValue
+		for id, time := range itemLastSeen {
+			kv = append(kv, KeyValue{id, time})
+		}
+		sort.Slice(kv, func(i, j int) bool { return kv[i].ts.Before(kv[j].ts) })
+
+		excess := len(kv) - maxItems
+		for i := range excess {
+			delete(itemLastSeen, kv[i].id)
+			needsUpdate = true
+		}
 	}
 
 	for _, item := range newItems {
